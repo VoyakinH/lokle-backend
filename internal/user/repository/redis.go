@@ -9,9 +9,9 @@ import (
 )
 
 type IRedisRepository interface {
-	CreateSession(context.Context, string, time.Duration) error
+	CreateSession(context.Context, string, string, time.Duration) error
 	DeleteSession(context.Context, string) error
-	CheckSession(context.Context, string) (int64, error)
+	CheckSession(context.Context, string) (string, error)
 	ProlongSession(context.Context, string, time.Duration) error
 }
 
@@ -29,8 +29,8 @@ func NewRedisRepository(cfg config.RedisConfig) IRedisRepository {
 	}
 }
 
-func (rr *redisRepository) CreateSession(ctx context.Context, sessionID string, expCookieTime time.Duration) error {
-	_, err := rr.Client.SetNX(ctx, sessionID, 0, expCookieTime*time.Second).Result()
+func (rr *redisRepository) CreateSession(ctx context.Context, sessionID string, userLogin string, expCookieTime time.Duration) error {
+	_, err := rr.Client.SetNX(ctx, sessionID, userLogin, expCookieTime*time.Second).Result()
 	return err
 }
 
@@ -39,8 +39,11 @@ func (rr *redisRepository) DeleteSession(ctx context.Context, cookie string) err
 	return nil
 }
 
-func (rr *redisRepository) CheckSession(ctx context.Context, cookie string) (int64, error) {
-	val := rr.Client.Exists(ctx, cookie).Val()
+func (rr *redisRepository) CheckSession(ctx context.Context, cookie string) (string, error) {
+	val, err := rr.Client.Get(ctx, cookie).Result()
+	if err != nil {
+		return "", err
+	}
 	return val, nil
 }
 

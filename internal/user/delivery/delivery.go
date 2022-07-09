@@ -31,13 +31,16 @@ const expCookieTime = 1382400
 func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	ctx := r.Context()
+
 	var credentials models.Credentials
 	err := ioutils.ReadJSON(r, &credentials)
-	if err != nil {
+	if err != nil || credentials.Email == "" || credentials.Password == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
 		ioutils.SendError(w, http.StatusBadRequest, "bad request")
 		return
 	}
+
+	// TODO: check login and password in postgresql
 
 	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, credentials, expCookieTime)
 	if err != nil || status != http.StatusOK {
@@ -89,11 +92,13 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	status, err := ud.UserUseCase.CheckSession(ctx, cookieToken.Value, expCookieTime)
+	_, status, err := ud.UserUseCase.CheckSession(ctx, cookieToken.Value, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
 	}
+
+	// TODO: select user from postgresql by email
 
 	cookie := &http.Cookie{
 		Name:   "session-id",

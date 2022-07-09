@@ -37,7 +37,7 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels(in *jlexe
 		}
 		switch key {
 		case "email":
-			out.Email = string(in.String())
+			out.Email = string(in.StringIntern())
 		case "password":
 			out.Password = string(in.String())
 		default:

@@ -179,3 +179,4 @@ Temporary Items
 # End of https://www.toptal.com/developers/gitignore/api/macos,go,goland
 
 config.json
+dump.rdb
