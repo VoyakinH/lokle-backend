@@ -1,12 +1,6 @@
-.PHONY: docker-run
-docker-run:
+.PHONY: run
+run:
+	docker stop lokle_api || true
+	docker rm lokle_api || true
 	docker build . -t lokle_api
-	docker run --name lokle_api -p 3001:3001 -d lokle_api
-
-.PHONY: docker-stop
-docker-stop:
-	docker stop lokle_api
-
-.PHONY: docker-prune
-docker-prune:
-	docker system prune -a --volumes
+	docker run --restart always --network host -h 127.0.0.1 --name lokle_api -p 3001:3001 -d lokle_api

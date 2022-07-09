@@ -4,7 +4,7 @@ import (
 	"context"
 	// "database/sql"
 	"encoding/json"
-	// "fmt"
+	"fmt"
 	// "github.com/xuri/excelize/v2"
 	"net/http"
 	"os"
@@ -177,9 +177,9 @@ type Lesson struct {
 // }
 
 func createUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
-	w.Header().Set("Access-Control-Allow-Methods", "POST")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	// w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
+	// w.Header().Set("Access-Control-Allow-Methods", "POST")
+	// w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 	var a Auth
 	err := json.NewDecoder(r.Body).Decode(&a)
@@ -198,6 +198,7 @@ func createUserSession(w http.ResponseWriter, r *http.Request) {
 
 	_, err = rdb.SetNX(ctx, sessionID.String(), 0, expCookieTime*time.Second).Result()
 	if err != nil {
+		fmt.Print(err)
 		w.WriteHeader(523)
 		err := json.NewEncoder(w).Encode(err)
 		if err != nil {
@@ -210,9 +211,9 @@ func createUserSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
-	w.Header().Set("Access-Control-Allow-Methods", "GET")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	// w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
+	// w.Header().Set("Access-Control-Allow-Methods", "GET")
+	// w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 	tokenCookie, err := r.Cookie("session-id")
 	if err != nil {
@@ -232,9 +233,9 @@ func deleteUserSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
-	w.Header().Set("Access-Control-Allow-Methods", "GET")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	// w.Header().Set("Access-Control-Allow-Origin", "http://185.225.34.197")
+	// w.Header().Set("Access-Control-Allow-Methods", "GET")
+	// w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 	tokenCookie, err := r.Cookie("session-id")
 	if err != nil {
@@ -269,9 +270,9 @@ func main() {
 
 	// importXLSX()
 
-	mux.HandleFunc("/login", createUserSession)
-	mux.HandleFunc("/logout", deleteUserSession)
-	mux.HandleFunc("/validate_user", checkUserSession)
+	mux.HandleFunc("/api/v1/login", createUserSession)
+	mux.HandleFunc("/api/v1/logout", deleteUserSession)
+	mux.HandleFunc("/api/v1/validate_user", checkUserSession)
 	err := http.ListenAndServe(":"+port, mux)
 	if err != nil {
 		return
