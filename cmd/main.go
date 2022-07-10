@@ -23,10 +23,11 @@ func main() {
 	logger := logrus.New()
 
 	// repository
-	rr := repository.NewRedisRepository(config.Redis)
+	pr := repository.NewPostgresqlRepository(config.Postgres, *logger)
+	rr := repository.NewRedisRepository(config.Redis, *logger)
 
 	// usecase
-	uu := usecase.NewUserUsecase(rr)
+	uu := usecase.NewUserUsecase(pr, rr, *logger)
 
 	// delivery
 	router := mux.NewRouter()

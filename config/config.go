@@ -25,6 +25,11 @@ type PostgresConfig struct {
 	DBName   string
 }
 
+type MailerConfig struct {
+	Email    string
+	Password string
+}
+
 type TimeoutsConfig struct {
 	WriteTimeout   time.Duration
 	ReadTimeout    time.Duration
@@ -35,6 +40,7 @@ var (
 	Lokle    ServerConfig
 	Redis    RedisConfig
 	Postgres PostgresConfig
+	Mailer   MailerConfig
 	Timeouts TimeoutsConfig
 )
 
@@ -63,10 +69,14 @@ func SetConfig() {
 		DBName:   viper.GetString(`postgres.name`),
 	}
 
+	Mailer = MailerConfig{
+		Email:    viper.GetString(`mailer.email`),
+		Password: viper.GetString(`mailer.password`),
+	}
+
 	Timeouts = TimeoutsConfig{
 		WriteTimeout:   5 * time.Second,
 		ReadTimeout:    5 * time.Second,
 		ContextTimeout: time.Second * 2,
 	}
-
 }

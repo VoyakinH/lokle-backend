@@ -6,6 +6,7 @@ import (
 
 	"github.com/VoyakinH/lokle_backend/config"
 	"github.com/go-redis/redis/v8"
+	"github.com/sirupsen/logrus"
 )
 
 type IRedisRepository interface {
@@ -16,31 +17,33 @@ type IRedisRepository interface {
 }
 
 type redisRepository struct {
-	Client *redis.Client
+	client *redis.Client
+	logger logrus.Logger
 }
 
-func NewRedisRepository(cfg config.RedisConfig) IRedisRepository {
+func NewRedisRepository(cfg config.RedisConfig, logger logrus.Logger) IRedisRepository {
 	return &redisRepository{
-		Client: redis.NewClient(&redis.Options{
+		client: redis.NewClient(&redis.Options{
 			Addr:     cfg.Addr,
 			Password: cfg.Password,
 			DB:       cfg.DB,
 		}),
+		logger: logger,
 	}
 }
 
 func (rr *redisRepository) CreateSession(ctx context.Context, sessionID string, userLogin string, expCookieTime time.Duration) error {
-	_, err := rr.Client.SetNX(ctx, sessionID, userLogin, expCookieTime*time.Second).Result()
+	_, err := rr.client.SetNX(ctx, sessionID, userLogin, expCookieTime*time.Second).Result()
 	return err
 }
 
 func (rr *redisRepository) DeleteSession(ctx context.Context, cookie string) error {
-	rr.Client.Del(ctx, cookie).Val()
+	rr.client.Del(ctx, cookie).Val()
 	return nil
 }
 
 func (rr *redisRepository) CheckSession(ctx context.Context, cookie string) (string, error) {
-	val, err := rr.Client.Get(ctx, cookie).Result()
+	val, err := rr.client.Get(ctx, cookie).Result()
 	if err != nil {
 		return "", err
 	}
@@ -48,6 +51,6 @@ func (rr *redisRepository) CheckSession(ctx context.Context, cookie string) (str
 }
 
 func (rr *redisRepository) ProlongSession(ctx context.Context, cookie string, expCookieTime time.Duration) error {
-	rr.Client.Expire(ctx, cookie, expCookieTime*time.Second)
+	rr.client.Expire(ctx, cookie, expCookieTime*time.Second)
 	return nil
 }

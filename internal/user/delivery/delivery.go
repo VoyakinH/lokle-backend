@@ -22,6 +22,7 @@ func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, logger logrus.L
 	}
 
 	router.HandleFunc("/api/v1/user/login", userDelivery.CreateUserSession).Methods("POST", "OPTIONS")
+	router.HandleFunc("/api/v1/user/signup", userDelivery.SignupParent).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/v1/user/logout", userDelivery.DeleteUserSession).Methods("DELETE", "OPTIONS")
 	router.HandleFunc("/api/v1/user/validate_user", userDelivery.CheckUserSession).Methods("GET", "OPTIONS")
 }
@@ -42,7 +43,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 
 	// TODO: check login and password in postgresql
 
-	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, credentials, expCookieTime)
+	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, credentials.Email, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -107,4 +108,38 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	http.SetCookie(w, cookie)
+}
+
+func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	ctx := r.Context()
+
+	var parent models.Parent
+	err := ioutils.ReadJSON(r, &parent)
+	if err != nil || parent.Email == "" || parent.Password == "" {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	createdParent, status, err := ud.UserUseCase.CreateParent(ctx, parent)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+	}
+
+	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, createdParent.Email, expCookieTime)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+	}
+
+	cookie := &http.Cookie{
+		Name:   "session-id",
+		Value:  sessionID,
+		MaxAge: expCookieTime,
+	}
+
+	http.SetCookie(w, cookie)
+	ioutils.Send(w, status, createdParent)
 }
