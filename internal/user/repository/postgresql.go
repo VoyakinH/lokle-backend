@@ -10,9 +10,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Role int8
+
+const (
+	ParentRole Role = iota
+	ChildRole
+)
+
 type IPostgresqlRepository interface {
+	GetUserByEmail(context.Context, string) (models.User, error)
 	GetParentByEmail(context.Context, string) (models.Parent, error)
-	CreateParent(context.Context, models.Parent) (models.Parent, error)
+	CreateUserParent(context.Context, models.Parent) (models.Parent, error)
 }
 
 type postgresqlRepository struct {
@@ -46,6 +54,28 @@ func NewPostgresqlRepository(cfg config.PostgresConfig, logger logrus.Logger) IP
 	return &postgresqlRepository{conn: pool, logger: logger}
 }
 
+func (pr *postgresqlRepository) GetUserByEmail(ctx context.Context, email string) (models.User, error) {
+	var user models.User
+	err := pr.conn.QueryRow(
+		"SELECT id, role, first_name, second_name, last_name, phone, email, email_verified, password FROM users WHERE email = $1;",
+		email,
+	).Scan(
+		&user.ID,
+		&user.Role,
+		&user.FirstName,
+		&user.SecondName,
+		&user.LastName,
+		&user.Phone,
+		&user.Email,
+		&user.EmailVerified,
+		&user.Password,
+	)
+	if err != nil {
+		return models.User{}, err
+	}
+	return user, nil
+}
+
 func (pr *postgresqlRepository) GetParentByEmail(ctx context.Context, email string) (models.Parent, error) {
 	var parent models.Parent
 	err := pr.conn.QueryRow(
@@ -66,12 +96,16 @@ func (pr *postgresqlRepository) GetParentByEmail(ctx context.Context, email stri
 	return parent, nil
 }
 
-func (pr *postgresqlRepository) CreateParent(ctx context.Context, parent models.Parent) (models.Parent, error) {
+// first registration stage for parents
+// now parent haven't passport and other documents
+// so we create only default user with role Parent = 0
+func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent models.Parent) (models.Parent, error) {
 	var createdParent models.Parent
 	err := pr.conn.QueryRow(
-		`INSERT INTO parents (first_name, second_name, last_name, phone, email, password)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO users (role, first_name, second_name, last_name, phone, email, password)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, first_name, second_name, last_name, phone, email, email_verified;`,
+		ParentRole,
 		parent.FirstName,
 		parent.SecondName,
 		parent.LastName,

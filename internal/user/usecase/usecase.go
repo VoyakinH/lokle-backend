@@ -18,7 +18,8 @@ import (
 type IUserUsecase interface {
 	CreateSession(context.Context, string, time.Duration) (string, int, error)
 	DeleteSession(context.Context, string) (int, error)
-	CheckSession(context.Context, string, time.Duration) (string, int, error)
+	CheckSession(context.Context, string, time.Duration) (models.User, int, error)
+	CheckUser(context.Context, models.Credentials) (models.User, int, error)
 	CreateParent(context.Context, models.Parent) (models.Parent, int, error)
 }
 
@@ -51,7 +52,6 @@ func (uu *userUsecase) CreateSession(ctx context.Context, email string, sessionE
 
 	err = uu.rdsSession.CreateSession(ctx, sessionID.String(), email, sessionExpire)
 	if err != nil {
-		// был 523 код почему?
 		return "", http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateSession: failed to create session in redis with err: %s", err)
 	}
 	return sessionID.String(), http.StatusOK, nil
@@ -65,28 +65,55 @@ func (uu *userUsecase) DeleteSession(ctx context.Context, cookie string) (int, e
 	return http.StatusOK, nil
 }
 
-func (uu *userUsecase) CheckSession(ctx context.Context, cookie string, expCookieTime time.Duration) (string, int, error) {
+func (uu *userUsecase) CheckSession(ctx context.Context, cookie string, expCookieTime time.Duration) (models.User, int, error) {
 	userEmail, err := uu.rdsSession.CheckSession(ctx, cookie)
 	if err != nil {
-		return "", http.StatusForbidden, fmt.Errorf("UserUsecase.CheckSession: failed to check session in redis")
+		return models.User{}, http.StatusForbidden, fmt.Errorf("UserUsecase.CheckSession: failed to check session in redis")
 	}
 	if userEmail == "" {
-		return "", http.StatusForbidden, fmt.Errorf("UserUsercase.CheckSession: user not authorized")
+		return models.User{}, http.StatusForbidden, fmt.Errorf("UserUsercase.CheckSession: user not authorized")
 	}
 	err = uu.rdsSession.ProlongSession(ctx, cookie, expCookieTime)
 	if err != nil {
-		return userEmail, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckSession: failed to prolong session in redis")
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckSession: failed to prolong session in redis")
 	}
-	return userEmail, http.StatusOK, nil
+
+	user, err := uu.psql.GetUserByEmail(ctx, userEmail)
+	if err == pgx.ErrNoRows {
+		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.CheckUser: user with same email not found")
+	} else if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check email in db with err: %s", err)
+	}
+
+	user.Password = ""
+
+	return user, http.StatusOK, nil
 }
 
-// func (uu *userUsecase) CreateParent(ctx context.Context, parent models.Parent) (models.Parent, int, error) {
+func (uu *userUsecase) CheckUser(ctx context.Context, credentials models.Credentials) (models.User, int, error) {
+	user, err := uu.psql.GetUserByEmail(ctx, credentials.Email)
+	if err == pgx.ErrNoRows {
+		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.CheckUser: user with same email not found")
+	} else if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check email in db with err: %s", err)
+	}
 
-// 	return createdParent, http.StatusOK, nil
-// }
+	isAuthorized, err := hasher.ComparePasswords(user.Password, credentials.Password)
+	if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check verified password: %s", err)
+	}
+
+	if !isAuthorized {
+		return models.User{}, http.StatusForbidden, fmt.Errorf("UserUsecase.CheckUser: user not authorized: %s", err)
+	}
+
+	user.Password = ""
+
+	return user, http.StatusOK, nil
+}
 
 func (uu *userUsecase) CreateParent(ctx context.Context, parent models.Parent) (models.Parent, int, error) {
-	_, err := uu.psql.GetParentByEmail(ctx, parent.Email)
+	_, err := uu.psql.GetUserByEmail(ctx, parent.Email)
 	if err == nil {
 		return models.Parent{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParent: parent with same email already exists")
 	} else if err != nil && err != pgx.ErrNoRows {
@@ -99,7 +126,7 @@ func (uu *userUsecase) CreateParent(ctx context.Context, parent models.Parent) (
 	}
 	parent.Password = hashedPswd
 
-	createdParent, err := uu.psql.CreateParent(ctx, parent)
+	createdParent, err := uu.psql.CreateUserParent(ctx, parent)
 	if err != nil {
 		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent with err: %s", err)
 	}

@@ -41,7 +41,12 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// TODO: check login and password in postgresql
+	user, status, err := ud.UserUseCase.CheckUser(ctx, credentials)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "failed login")
+		return
+	}
 
 	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, credentials.Email, expCookieTime)
 	if err != nil || status != http.StatusOK {
@@ -57,6 +62,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 	}
 
 	http.SetCookie(w, cookie)
+	ioutils.Send(w, status, user)
 }
 
 func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request) {
@@ -95,14 +101,12 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, status, err := ud.UserUseCase.CheckSession(ctx, cookieToken.Value, expCookieTime)
+	user, status, err := ud.UserUseCase.CheckSession(ctx, cookieToken.Value, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
 		return
 	}
-
-	// TODO: select user from postgresql by email
 
 	cookie := &http.Cookie{
 		Name:   "session-id",
@@ -111,6 +115,7 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	http.SetCookie(w, cookie)
+	ioutils.Send(w, status, user)
 }
 
 func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
