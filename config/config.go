@@ -37,11 +37,12 @@ type TimeoutsConfig struct {
 }
 
 var (
-	Lokle    ServerConfig
-	Redis    RedisConfig
-	Postgres PostgresConfig
-	Mailer   MailerConfig
-	Timeouts TimeoutsConfig
+	Lokle        ServerConfig
+	RedisSession RedisConfig
+	RedisUser    RedisConfig
+	Postgres     PostgresConfig
+	Mailer       MailerConfig
+	Timeouts     TimeoutsConfig
 )
 
 func SetConfig() {
@@ -55,10 +56,16 @@ func SetConfig() {
 		Port: viper.GetString(`lokle.port`),
 	}
 
-	Redis = RedisConfig{
+	RedisSession = RedisConfig{
 		Addr:     viper.GetString(`redis.address`),
 		Password: viper.GetString(`redis.password`),
-		DB:       viper.GetInt(`redis.db`),
+		DB:       viper.GetInt(`redis.session_db_name`),
+	}
+
+	RedisUser = RedisConfig{
+		Addr:     viper.GetString(`redis.address`),
+		Password: viper.GetString(`redis.password`),
+		DB:       viper.GetInt(`redis.session_db_name`),
 	}
 
 	Postgres = PostgresConfig{

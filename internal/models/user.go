@@ -4,6 +4,12 @@ package models
 type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	IsParent bool   `json:"is_parent"`
+}
+
+type Session struct {
+	Email    string
+	IsParent bool
 }
 
 //easyjson:json

@@ -24,10 +24,11 @@ func main() {
 
 	// repository
 	pr := repository.NewPostgresqlRepository(config.Postgres, *logger)
-	rr := repository.NewRedisRepository(config.Redis, *logger)
+	rsr := repository.NewRedisSessionRepository(config.RedisSession, *logger)
+	rur := repository.NewRedisUserRepository(config.RedisUser, *logger)
 
 	// usecase
-	uu := usecase.NewUserUsecase(pr, rr, *logger)
+	uu := usecase.NewUserUsecase(pr, rsr, rur, *logger)
 
 	// delivery
 	router := mux.NewRouter()

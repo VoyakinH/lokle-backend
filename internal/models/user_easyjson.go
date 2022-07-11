@@ -155,6 +155,8 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels1(in *jlex
 			out.Email = string(in.String())
 		case "password":
 			out.Password = string(in.String())
+		case "is_parent":
+			out.IsParent = bool(in.Bool())
 		default:
 			in.SkipRecursive()
 		}
@@ -178,6 +180,11 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels1(out *jwr
 		const prefix string = ",\"password\":"
 		out.RawString(prefix)
 		out.String(string(in.Password))
+	}
+	{
+		const prefix string = ",\"is_parent\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.IsParent))
 	}
 	out.RawByte('}')
 }
