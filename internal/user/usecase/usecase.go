@@ -80,9 +80,9 @@ func (uu *userUsecase) CheckSession(ctx context.Context, cookie string, expCooki
 
 	user, err := uu.psql.GetUserByEmail(ctx, userEmail)
 	if err == pgx.ErrNoRows {
-		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.CheckUser: user with same email not found")
+		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.CheckSession: user with same email not found")
 	} else if err != nil {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check email in db with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckSession: failed to check email in db with err: %s", err)
 	}
 
 	user.Password = ""
@@ -93,7 +93,7 @@ func (uu *userUsecase) CheckSession(ctx context.Context, cookie string, expCooki
 func (uu *userUsecase) CheckUser(ctx context.Context, credentials models.Credentials) (models.User, int, error) {
 	user, err := uu.psql.GetUserByEmail(ctx, credentials.Email)
 	if err == pgx.ErrNoRows {
-		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.CheckUser: user with same email not found")
+		return models.User{}, http.StatusForbidden, fmt.Errorf("UserUsecase.CheckUser: user with same email not found")
 	} else if err != nil {
 		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check email in db with err: %s", err)
 	}
