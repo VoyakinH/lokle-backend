@@ -1,61 +1,153 @@
 create extension if not exists citext;
 
-create table if not exists users
+-- auto-generated definition
+create table users
 (
-    id             serial primary key,
-    role           smallint not null,
-    first_name     varchar(32) not null,
-    second_name    varchar(32) not null,
-    last_name      varchar(32) not null,
-    phone          varchar(16) not null,
-    email          citext unique,
-    email_verified boolean default false,
-    password       varchar(64) not null
+    id             bigserial
+        constraint users_pk
+            primary key,
+    role           varchar(16)           not null,
+    first_name     varchar(32)           not null,
+    second_name    varchar(32)           not null,
+    last_name      varchar(32),
+    phone          varchar(16)           not null,
+    email          citext                not null,
+    email_verified boolean default false not null,
+    password       varchar(64)           not null
 );
 
-create table if not exists parents
+alter table users
+    owner to lokle_admin;
+
+create unique index users_email_uindex
+    on users (email);
+
+create unique index users_id_uindex
+    on users (id);
+
+
+
+-- auto-generated definition
+create table parents
 (
-    id                     serial primary key,
-    user_id                int not null,
-    constraint fk_users_parents foreign key (user_id) references users (id),
-    passport               varchar(8),
-    passport_verified      boolean default false,
-    passport_uploaded_time timestamptz,
-    dir_path               varchar(128)
+    id                bigserial
+        constraint parents_pk
+            primary key,
+    user_id           bigint                not null
+        constraint parents_users_id_fk
+            references users
+            on update cascade on delete cascade,
+    passport          varchar(64),
+    passport_verified boolean default false not null,
+    dir_path          varchar(128)
 );
 
-create table if not exists children
+alter table parents
+    owner to lokle_admin;
+
+create unique index parents_id_uindex
+    on parents (id);
+
+create unique index parents_user_id_uindex
+    on parents (user_id);
+
+
+
+
+
+
+-- auto-generated definition
+create table children
 (
-    id                      serial primary key,
-    user_id                 int not null,
-    constraint fk_users_children foreign key (user_id) references users (id),
-    birth_date              date not null,
-    first_stage_done        boolean default false,
-    first_stage_start_time  timestamptz,
-    second_stage_done       boolean default false,
-    second_stage_start_time timestamptz,
-    third_stage_done        boolean default false,
-    third_stage_start_time  timestamptz,
-    passport                varchar(8),
-    place_of_residence      varchar(128) not null,
-    place_of_registration   varchar(128) not null,
-    dir_path                varchar(128),
-    remarks                 varchar(1024)
+    id                    bigserial
+        constraint children_pk
+            primary key,
+    user_id               bigint             not null
+        constraint children_users_id_fk
+            references users
+            on update cascade on delete cascade,
+    birth_date            bigint             not null,
+    done_stage            smallint default 0 not null,
+    passport              varchar(64),
+    place_of_residence    varchar(128)       not null,
+    place_of_registration varchar(128)       not null,
+    dir_path              varchar(128)
 );
 
-create table if not exists parents_children
+alter table children
+    owner to lokle_admin;
+
+create unique index children_id_uindex
+    on children (id);
+
+create unique index children_user_id_uindex
+    on children (user_id);
+
+
+
+
+-- auto-generated definition
+create table parents_children
 (
-    id           serial primary key,
-    parent_id    int not null,
-    constraint fk_pc_parents foreign key (parent_id) references parents (id),
-    child_id     int not null,
-    constraint fk_pc_children foreign key (child_id) references children (id),
-    -- мб через флаги?
-    relationship smallint not null, 
-    unique(parent_id, child_id)
+    id           bigserial
+        constraint parents_children_pk
+            primary key,
+    parent_id    bigint      not null
+        constraint parents_children_parents_id_fk
+            references parents
+            on update cascade on delete cascade,
+    child_id     bigint      not null
+        constraint parents_children_children_id_fk
+            references children
+            on update cascade on delete cascade,
+    relationship varchar(16) not null
 );
 
-drop table parents_children;
-drop table children;
-drop table parents;
+alter table parents_children
+    owner to lokle_admin;
+
+create unique index parents_children_id_uindex
+    on parents_children (id);
+
+
+
+
+
+-- auto-generated definition
+create table registration_requests
+(
+    id          bigserial
+        constraint registration_requests_pk
+            primary key,
+    user_id     bigint                                           not null
+        constraint registration_requests_users_id_fk
+            references users
+            on update cascade on delete cascade,
+    manager_id  bigint
+        constraint registration_requests_users_id_fk_2
+            references users
+            on update cascade on delete cascade,
+    type        smallint                                         not null,
+    status      varchar(16) default 'pending'::character varying not null,
+    create_time bigint                                           not null,
+    message     varchar(1024)
+);
+
+alter table registration_requests
+    owner to lokle_admin;
+
+create unique index registration_requests_id_uindex
+    on registration_requests (id);
+
+
+
+drop table if exists registration_requests cascade;
+
+drop table if exists parents_children cascade;
+
+drop table if exists parents cascade;
+
+drop table if exists children cascade;
+
+drop table if exists users cascade;
 
