@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/VoyakinH/lokle_backend/config"
@@ -20,7 +21,8 @@ const (
 type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
 	GetParentByEmail(context.Context, string) (models.Parent, error)
-	CreateUserParent(context.Context, models.Parent) (models.Parent, error)
+	CreateUserParent(context.Context, models.User) (models.User, error)
+	DeleteUser(context.Context, uint64) (models.User, error)
 }
 
 type postgresqlRepository struct {
@@ -99,8 +101,8 @@ func (pr *postgresqlRepository) GetParentByEmail(ctx context.Context, email stri
 // first registration stage for parents
 // now parent haven't passport and other documents
 // so we create only default user with role Parent = 0
-func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent models.Parent) (models.Parent, error) {
-	var createdParent models.Parent
+func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent models.User) (models.User, error) {
+	var createdParent models.User
 	err := pr.conn.QueryRow(
 		`INSERT INTO users (role, first_name, second_name, last_name, phone, email, password)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -123,7 +125,33 @@ func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent mod
 	)
 
 	if err != nil {
-		return models.Parent{}, err
+		return models.User{}, err
 	}
 	return createdParent, nil
+}
+
+func (pr *postgresqlRepository) DeleteUser(ctx context.Context, id uint64) (models.User, error) {
+	var deletedUser models.User
+	err := pr.conn.QueryRow(
+		`DELETE FROM users WHERE id = $1
+		RETURNING id, first_name, second_name, last_name, phone, email, email_verified;`,
+		id,
+	).Scan(
+		&deletedUser.ID,
+		&deletedUser.FirstName,
+		&deletedUser.SecondName,
+		&deletedUser.LastName,
+		&deletedUser.Phone,
+		&deletedUser.Email,
+		&deletedUser.EmailVerified,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return models.User{}, nil
+		} else {
+			return models.User{}, err
+		}
+	}
+	return deletedUser, nil
 }

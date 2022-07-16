@@ -65,7 +65,7 @@ func SetConfig() {
 	RedisUser = RedisConfig{
 		Addr:     viper.GetString(`redis.address`),
 		Password: viper.GetString(`redis.password`),
-		DB:       viper.GetInt(`redis.session_db_name`),
+		DB:       viper.GetInt(`redis.user_db_name`),
 	}
 
 	Postgres = PostgresConfig{

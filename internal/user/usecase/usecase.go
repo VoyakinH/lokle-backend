@@ -20,7 +20,7 @@ type IUserUsecase interface {
 	DeleteSession(context.Context, string) (int, error)
 	CheckSession(context.Context, string, time.Duration) (models.User, int, error)
 	CheckUser(context.Context, models.Credentials) (models.User, int, error)
-	CreateParent(context.Context, models.Parent) (models.Parent, int, error)
+	CreateParent(context.Context, models.User) (models.User, int, error)
 }
 
 type userUsecase struct {
@@ -99,11 +99,7 @@ func (uu *userUsecase) CheckUser(ctx context.Context, credentials models.Credent
 	}
 
 	isAuthorized, err := hasher.ComparePasswords(user.Password, credentials.Password)
-	if err != nil {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckUser: failed to check verified password: %s", err)
-	}
-
-	if !isAuthorized {
+	if !isAuthorized || err != nil {
 		return models.User{}, http.StatusForbidden, fmt.Errorf("UserUsecase.CheckUser: user not authorized: %s", err)
 	}
 
@@ -112,38 +108,39 @@ func (uu *userUsecase) CheckUser(ctx context.Context, credentials models.Credent
 	return user, http.StatusOK, nil
 }
 
-func (uu *userUsecase) CreateParent(ctx context.Context, parent models.Parent) (models.Parent, int, error) {
+func (uu *userUsecase) CreateParent(ctx context.Context, parent models.User) (models.User, int, error) {
 	_, err := uu.psql.GetUserByEmail(ctx, parent.Email)
 	if err == nil {
-		return models.Parent{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParent: parent with same email already exists")
+		return models.User{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParent: parent with same email already exists")
 	} else if err != nil && err != pgx.ErrNoRows {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to check email in db with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to check email in db with err: %s", err)
 	}
 
 	hashedPswd, err := hasher.HashAndSalt(parent.Password)
 	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to hash password with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to hash password with err: %s", err)
 	}
 	parent.Password = hashedPswd
 
 	createdParent, err := uu.psql.CreateUserParent(ctx, parent)
 	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent with err: %s", err)
 	}
 
 	token, err := uuid.NewRandom()
 	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to generate token for verification email: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to generate token for verification email: %s", err)
 	}
 
 	err = uu.rdsUser.AddUserToken(ctx, token.String(), createdParent.Email, expVerifiedTokenTime)
 	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to save token for verification email to redis: %s", err)
+		uu.psql.DeleteUser(ctx, createdParent.ID)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to save token for verification email to redis: %s", err)
 	}
 
-	err = mailer.SendVerifiedEmail(createdParent.Email, token.String())
+	err = mailer.SendVerifiedEmail(createdParent.Email, createdParent.FirstName, createdParent.SecondName, token.String())
 	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to send verification email to parent with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to send verification email to parent with err: %s", err)
 	}
 
 	createdParent.Password = ""
