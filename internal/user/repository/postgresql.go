@@ -11,18 +11,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Role int8
-
-const (
-	ParentRole Role = iota
-	ChildRole
-)
-
 type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
 	GetParentByEmail(context.Context, string) (models.Parent, error)
 	CreateUserParent(context.Context, models.User) (models.User, error)
 	DeleteUser(context.Context, uint64) (models.User, error)
+	VerifyEmail(context.Context, string) (uint64, error)
+	CreateParent(context.Context, uint64) (models.Parent, error)
 }
 
 type postgresqlRepository struct {
@@ -107,7 +102,7 @@ func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent mod
 		`INSERT INTO users (role, first_name, second_name, last_name, phone, email, password)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, first_name, second_name, last_name, phone, email, email_verified;`,
-		ParentRole,
+		models.ParentRole,
 		parent.FirstName,
 		parent.SecondName,
 		parent.LastName,
@@ -154,4 +149,40 @@ func (pr *postgresqlRepository) DeleteUser(ctx context.Context, id uint64) (mode
 		}
 	}
 	return deletedUser, nil
+}
+
+func (pr *postgresqlRepository) VerifyEmail(ctx context.Context, email string) (uint64, error) {
+	var updatedUserID uint64
+	err := pr.conn.QueryRow(
+		`UPDATE users
+		SET email_verified = true
+		WHERE email = $1
+		RETURNING id;`,
+		email,
+	).Scan(
+		&updatedUserID,
+	)
+
+	if err != nil {
+		return 0, err
+	}
+	return updatedUserID, nil
+}
+
+func (pr *postgresqlRepository) CreateParent(ctx context.Context, uid uint64) (models.Parent, error) {
+	var createdParent models.Parent
+	err := pr.conn.QueryRow(
+		`INSERT INTO parents (user_id)
+		VALUES ($1)
+		ON CONFLICT DO NOTHING
+		RETURNING id;`,
+		uid,
+	).Scan(
+		&createdParent.ID,
+	)
+
+	if err != nil && err != pgx.ErrNoRows {
+		return models.Parent{}, err
+	}
+	return createdParent, nil
 }

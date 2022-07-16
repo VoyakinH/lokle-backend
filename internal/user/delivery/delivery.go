@@ -4,7 +4,10 @@ import (
 	"net/http"
 
 	"github.com/VoyakinH/lokle_backend/internal/models"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/ctx_utils"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/ioutils"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/middleware"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/tools"
 	"github.com/VoyakinH/lokle_backend/internal/user/usecase"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -21,20 +24,36 @@ func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, logger logrus.L
 		logger:      logger,
 	}
 
-	router.HandleFunc("/api/v1/user/auth", userDelivery.CreateUserSession).Methods("POST", "OPTIONS")
-	router.HandleFunc("/api/v1/user/auth", userDelivery.DeleteUserSession).Methods("DELETE", "OPTIONS")
-	router.HandleFunc("/api/v1/user/auth", userDelivery.CheckUserSession).Methods("GET", "OPTIONS")
+	auth := middleware.NewAuthMiddleware(uu, logger)
 
-	router.HandleFunc("/api/v1/user/parent", userDelivery.SignupParent).Methods("POST", "OPTIONS")
+	userAPI := router.PathPrefix("/api/v1/user/").Subrouter()
+	userAPI.Use(middleware.WithJSON)
 
-	// router.HandleFunc("api/v1/user/email", userDelivery.EmailVerification).Methods("GET", "OPTIONS")
+	userAPI.HandleFunc("/auth", userDelivery.CreateUserSession).Methods(http.MethodPost)
+	userAPI.HandleFunc("/auth", userDelivery.DeleteUserSession).Methods(http.MethodDelete)
+	userAPI.Handle("/auth", auth.WithAuth(http.HandlerFunc(userDelivery.CheckUserSession))).Methods(http.MethodGet)
+
+	userAPI.HandleFunc("/parent", userDelivery.SignupParent).Methods(http.MethodPost)
+	userAPI.HandleFunc("/parent", userDelivery.GetParent).Methods(http.MethodGet)
+
+	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
+	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
+
+	// router.HandleFunc("/api/v1/user/auth", userDelivery.CreateUserSession).Methods("POST", "OPTIONS")
+	// router.HandleFunc("/api/v1/user/auth", userDelivery.DeleteUserSession).Methods("DELETE", "OPTIONS")
+	// router.HandleFunc("/api/v1/user/auth", userDelivery.CheckUserSession).Methods("GET", "OPTIONS")
+
+	// router.HandleFunc("/api/v1/user/parent", userDelivery.SignupParent).Methods("POST", "OPTIONS")
+	// router.HandleFunc("/api/v1/user/parent", userDelivery.GetParent).Methods("GET", "OPTIONS")
+
+	// router.HandleFunc("/api/v1/user/email", userDelivery.EmailVerification).Methods("GET", "OPTIONS")
+	// router.HandleFunc("/api/v1/user/email", userDelivery.RepeatEmailVerification).Methods("POST", "OPTIONS")
 
 }
 
 const expCookieTime = 1382400
 
 func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	ctx := r.Context()
 
 	var credentials models.Credentials
@@ -76,12 +95,11 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 }
 
 func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	ctx := r.Context()
 	cookieToken, err := r.Cookie("session-id")
 	if err != nil {
-		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
-		ioutils.SendError(w, http.StatusUnauthorized, "no credentials")
+		ud.logger.Warnf("%s cookie not found with [status=%d] [error=%s]", r.URL, http.StatusOK, err)
+		ioutils.SendError(w, http.StatusOK, "no credentials")
 		return
 	}
 
@@ -102,8 +120,14 @@ func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request
 }
 
 func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	ctx := r.Context()
+	user := ctx_utils.GetUser(ctx)
+	if user == nil {
+		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no credentials")
+		return
+	}
+
 	cookieToken, err := r.Cookie("session-id")
 	if err != nil {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
@@ -111,7 +135,7 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user, status, err := ud.UserUseCase.CheckSession(ctx, cookieToken.Value, expCookieTime)
+	status, err := ud.UserUseCase.ProlongSession(ctx, cookieToken.Value, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -125,11 +149,10 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	http.SetCookie(w, cookie)
-	ioutils.Send(w, status, user)
+	ioutils.Send(w, status, tools.UserToUserRes(*user))
 }
 
 func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	ctx := r.Context()
 
 	var parent models.User
@@ -150,10 +173,47 @@ func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
 	ioutils.Send(w, status, createdParent)
 }
 
-// func (ud *UserDelivery) EmailVerification(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-// 	ctx := r.Context()
+func (ud *UserDelivery) EmailVerification(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-// 	urlQuiry := r.URL.Query()
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, "empty token")
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
 
-// }
+	status, err := ud.UserUseCase.VerifyEmail(ctx, token)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
+func (ud *UserDelivery) RepeatEmailVerification(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var credentials models.Credentials
+	err := ioutils.ReadJSON(r, &credentials)
+	if err != nil || credentials.Email == "" || credentials.Password == "" {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := ud.UserUseCase.RepeatEmailVerification(ctx, credentials)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "failed login")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
+func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
+
+}

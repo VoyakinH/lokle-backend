@@ -6,16 +6,50 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+type Role int8
+
+const (
+	ParentRole Role = iota
+	ChildRole
+	ManagerRole
+	AdminRole
+)
+
+func (r Role) String() string {
+	switch r {
+	case ParentRole:
+		return "PARENT"
+	case ChildRole:
+		return "CHILD"
+	case ManagerRole:
+		return "MANAGER"
+	case AdminRole:
+		return "ADMIN"
+	}
+	return "UNKNOWN"
+}
+
 //easyjson:json
 type User struct {
 	ID            uint64 `json:"id"`
-	Role          int8   `json:"role"`
+	Role          Role   `json:"role"`
 	FirstName     string `json:"first_name"`
 	SecondName    string `json:"second_name"`
 	LastName      string `json:"last_name"`
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
-	Password      string `json:"password,omitempty"`
+	Password      string `json:"password"`
+	Phone         string `json:"phone"`
+}
+
+//easyjson:json
+type UserRes struct {
+	Role          string `json:"role"`
+	FirstName     string `json:"first_name"`
+	SecondName    string `json:"second_name"`
+	LastName      string `json:"last_name"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
 	Phone         string `json:"phone"`
 }
 
