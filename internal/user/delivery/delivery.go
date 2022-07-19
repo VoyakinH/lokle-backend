@@ -14,17 +14,15 @@ import (
 )
 
 type UserDelivery struct {
-	UserUseCase usecase.IUserUsecase
+	userUseCase usecase.IUserUsecase
 	logger      logrus.Logger
 }
 
-func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, logger logrus.Logger) {
+func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware.AuthMiddleware, logger logrus.Logger) {
 	userDelivery := &UserDelivery{
-		UserUseCase: uu,
+		userUseCase: uu,
 		logger:      logger,
 	}
-
-	auth := middleware.NewAuthMiddleware(uu, logger)
 
 	userAPI := router.PathPrefix("/api/v1/user/").Subrouter()
 	userAPI.Use(middleware.WithJSON)
@@ -38,17 +36,6 @@ func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, logger logrus.L
 
 	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
 	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
-
-	// router.HandleFunc("/api/v1/user/auth", userDelivery.CreateUserSession).Methods("POST", "OPTIONS")
-	// router.HandleFunc("/api/v1/user/auth", userDelivery.DeleteUserSession).Methods("DELETE", "OPTIONS")
-	// router.HandleFunc("/api/v1/user/auth", userDelivery.CheckUserSession).Methods("GET", "OPTIONS")
-
-	// router.HandleFunc("/api/v1/user/parent", userDelivery.SignupParent).Methods("POST", "OPTIONS")
-	// router.HandleFunc("/api/v1/user/parent", userDelivery.GetParent).Methods("GET", "OPTIONS")
-
-	// router.HandleFunc("/api/v1/user/email", userDelivery.EmailVerification).Methods("GET", "OPTIONS")
-	// router.HandleFunc("/api/v1/user/email", userDelivery.RepeatEmailVerification).Methods("POST", "OPTIONS")
-
 }
 
 const expCookieTime = 1382400
@@ -64,7 +51,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	user, status, err := ud.UserUseCase.CheckUser(ctx, credentials)
+	user, status, err := ud.userUseCase.CheckUser(ctx, credentials)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "failed login")
@@ -77,7 +64,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	sessionID, status, err := ud.UserUseCase.CreateSession(ctx, credentials.Email, expCookieTime)
+	sessionID, status, err := ud.userUseCase.CreateSession(ctx, credentials.Email, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -88,10 +75,11 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		Name:   "session-id",
 		Value:  sessionID,
 		MaxAge: expCookieTime,
+		Path:   "/api/v1",
 	}
 
 	http.SetCookie(w, cookie)
-	ioutils.Send(w, status, user)
+	ioutils.Send(w, status, tools.UserToUserRes(user))
 }
 
 func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +91,7 @@ func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	status, err := ud.UserUseCase.DeleteSession(ctx, cookieToken.Value)
+	status, err := ud.userUseCase.DeleteSession(ctx, cookieToken.Value)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -114,6 +102,7 @@ func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request
 		Name:   "session-id",
 		Value:  "",
 		MaxAge: -1,
+		Path:   "/api/v1",
 	}
 
 	http.SetCookie(w, cookie)
@@ -124,7 +113,7 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 	user := ctx_utils.GetUser(ctx)
 	if user == nil {
 		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no credentials")
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
 		return
 	}
 
@@ -135,7 +124,7 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	status, err := ud.UserUseCase.ProlongSession(ctx, cookieToken.Value, expCookieTime)
+	status, err := ud.userUseCase.ProlongSession(ctx, cookieToken.Value, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -146,6 +135,7 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 		Name:   "session-id",
 		Value:  cookieToken.Value,
 		MaxAge: expCookieTime,
+		Path:   "/api/v1",
 	}
 
 	http.SetCookie(w, cookie)
@@ -163,14 +153,14 @@ func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdParent, status, err := ud.UserUseCase.CreateParent(ctx, parent)
+	createdParent, status, err := ud.userUseCase.CreateParent(ctx, parent)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
 		return
 	}
 
-	ioutils.Send(w, status, createdParent)
+	ioutils.Send(w, status, tools.UserToUserRes(createdParent))
 }
 
 func (ud *UserDelivery) EmailVerification(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +173,7 @@ func (ud *UserDelivery) EmailVerification(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	status, err := ud.UserUseCase.VerifyEmail(ctx, token)
+	status, err := ud.userUseCase.VerifyEmail(ctx, token)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -204,7 +194,7 @@ func (ud *UserDelivery) RepeatEmailVerification(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	status, err := ud.UserUseCase.RepeatEmailVerification(ctx, credentials)
+	status, err := ud.userUseCase.RepeatEmailVerification(ctx, credentials)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "failed login")

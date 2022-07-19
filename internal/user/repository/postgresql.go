@@ -13,11 +13,14 @@ import (
 
 type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
-	GetParentByEmail(context.Context, string) (models.Parent, error)
+	GetParentByID(context.Context, uint64) (models.Parent, error)
+	GetChildByID(context.Context, uint64) (models.Child, error)
 	CreateUserParent(context.Context, models.User) (models.User, error)
 	DeleteUser(context.Context, uint64) (models.User, error)
 	VerifyEmail(context.Context, string) (uint64, error)
 	CreateParent(context.Context, uint64) (models.Parent, error)
+	CreateParentDirPath(context.Context, uint64, string) (string, error)
+	CreateChildDirPath(context.Context, uint64, string) (string, error)
 }
 
 type postgresqlRepository struct {
@@ -71,26 +74,6 @@ func (pr *postgresqlRepository) GetUserByEmail(ctx context.Context, email string
 		return models.User{}, err
 	}
 	return user, nil
-}
-
-func (pr *postgresqlRepository) GetParentByEmail(ctx context.Context, email string) (models.Parent, error) {
-	var parent models.Parent
-	err := pr.conn.QueryRow(
-		"SELECT id, first_name, second_name, last_name, phone, email, email_verified FROM parents WHERE email = $1;",
-		email,
-	).Scan(
-		&parent.ID,
-		&parent.FirstName,
-		&parent.SecondName,
-		&parent.LastName,
-		&parent.Phone,
-		&parent.Email,
-		&parent.EmailVerified,
-	)
-	if err != nil {
-		return models.Parent{}, err
-	}
-	return parent, nil
 }
 
 // first registration stage for parents
@@ -185,4 +168,134 @@ func (pr *postgresqlRepository) CreateParent(ctx context.Context, uid uint64) (m
 		return models.Parent{}, err
 	}
 	return createdParent, nil
+}
+
+func (pr *postgresqlRepository) GetParentByID(ctx context.Context, uid uint64) (models.Parent, error) {
+	var parent models.Parent
+	err := pr.conn.QueryRow(
+		`SELECT
+			p.id,
+			p.user_id,
+			us.role,
+			us.first_name,
+			us.second_name,
+			us.last_name,
+			us.phone,
+			us.email,
+			us.email_verified,
+			us.password,
+			p.passport,
+			p.passport_verified,
+			p.dir_path
+		FROM users as us
+		JOIN parents as p
+		ON (p.user_id = us.id)
+		WHERE us.id = $1;`,
+		uid,
+	).Scan(
+		&parent.ID,
+		&parent.UserID,
+		&parent.Role,
+		&parent.FirstName,
+		&parent.SecondName,
+		&parent.LastName,
+		&parent.Phone,
+		&parent.Email,
+		&parent.EmailVerified,
+		&parent.Password,
+		&parent.Passport,
+		&parent.PassportVerified,
+		&parent.DirPath,
+	)
+	if err != nil {
+		return models.Parent{}, err
+	}
+	return parent, nil
+}
+
+func (pr *postgresqlRepository) GetChildByID(ctx context.Context, uid uint64) (models.Child, error) {
+	var child models.Child
+	err := pr.conn.QueryRow(
+		`SELECT
+			c.id,
+			c.user_id,
+			us.role,
+			us.first_name,
+			us.second_name,
+			us.last_name,
+			us.phone,
+			us.email,
+			us.email_verified,
+			us.password,
+			c.birth_date,
+			c.done_stage,
+			c.passport,
+			c.place_of_residence,
+			c.place_of_registration,
+			c.dir_path
+		FROM users as us
+		JOIN children as c
+		ON (c.user_id = us.id)
+		WHERE us.id = $1;`,
+		uid,
+	).Scan(
+		&child.ID,
+		&child.UserID,
+		&child.Role,
+		&child.FirstName,
+		&child.SecondName,
+		&child.LastName,
+		&child.Phone,
+		&child.Email,
+		&child.EmailVerified,
+		&child.Password,
+		&child.BirthDate,
+		&child.DoneStage,
+		&child.Passport,
+		&child.PlaceOfResidence,
+		&child.PlaceOfRegistration,
+		&child.DirPath,
+	)
+	if err != nil {
+		return models.Child{}, err
+	}
+	return child, nil
+}
+
+func (pr *postgresqlRepository) CreateParentDirPath(ctx context.Context, pid uint64, path string) (string, error) {
+	var insertedDirPath string
+	err := pr.conn.QueryRow(
+		`UPDATE parents
+		SET dir_path = $2
+		WHERE id = $1
+		RETURNING dir_path;`,
+		pid,
+		path,
+	).Scan(
+		&insertedDirPath,
+	)
+
+	if err != nil {
+		return "", err
+	}
+	return insertedDirPath, nil
+}
+
+func (pr *postgresqlRepository) CreateChildDirPath(ctx context.Context, cid uint64, path string) (string, error) {
+	var insertedDirPath string
+	err := pr.conn.QueryRow(
+		`UPDATE children
+		SET dir_path = $2
+		WHERE id = $1
+		RETURNING dir_path;`,
+		cid,
+		path,
+	).Scan(
+		&insertedDirPath,
+	)
+
+	if err != nil {
+		return "", err
+	}
+	return insertedDirPath, nil
 }

@@ -6,7 +6,7 @@ create table users
     id             bigserial
         constraint users_pk
             primary key,
-    role           varchar(16)           not null,
+    role           smallint              not null,
     first_name     varchar(32)           not null,
     second_name    varchar(32)           not null,
     last_name      varchar(32),
@@ -37,9 +37,9 @@ create table parents
         constraint parents_users_id_fk
             references users
             on update cascade on delete cascade,
-    passport          varchar(64),
+    passport          varchar(64) default ''::character varying,
     passport_verified boolean default false not null,
-    dir_path          varchar(128)
+    dir_path          varchar(128) default ''::character varying
 );
 
 alter table parents
@@ -68,10 +68,10 @@ create table children
             on update cascade on delete cascade,
     birth_date            bigint             not null,
     done_stage            smallint default 0 not null,
-    passport              varchar(64),
+    passport              varchar(64) default ''::character varying,
     place_of_residence    varchar(128)       not null,
     place_of_registration varchar(128)       not null,
-    dir_path              varchar(128)
+    dir_path              varchar(128) default ''::character varying
 );
 
 alter table children
@@ -130,7 +130,7 @@ create table registration_requests
     type        smallint                                         not null,
     status      varchar(16) default 'pending'::character varying not null,
     create_time bigint                                           not null,
-    message     varchar(1024)
+    message     varchar(1024) default ''::character varying
 );
 
 alter table registration_requests

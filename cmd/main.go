@@ -8,9 +8,11 @@ import (
 	"net/http"
 
 	"github.com/VoyakinH/lokle_backend/config"
-	"github.com/VoyakinH/lokle_backend/internal/user/delivery"
-	"github.com/VoyakinH/lokle_backend/internal/user/repository"
-	"github.com/VoyakinH/lokle_backend/internal/user/usecase"
+	file_manager "github.com/VoyakinH/lokle_backend/internal/file"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/middleware"
+	user_delivery "github.com/VoyakinH/lokle_backend/internal/user/delivery"
+	user_repository "github.com/VoyakinH/lokle_backend/internal/user/repository"
+	user_usecase "github.com/VoyakinH/lokle_backend/internal/user/usecase"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
@@ -23,16 +25,20 @@ func main() {
 	logger := logrus.New()
 
 	// repository
-	pr := repository.NewPostgresqlRepository(config.Postgres, *logger)
-	rsr := repository.NewRedisSessionRepository(config.RedisSession, *logger)
-	rur := repository.NewRedisUserRepository(config.RedisUser, *logger)
+	pr := user_repository.NewPostgresqlRepository(config.Postgres, *logger)
+	rsr := user_repository.NewRedisSessionRepository(config.RedisSession, *logger)
+	rur := user_repository.NewRedisUserRepository(config.RedisUser, *logger)
 
 	// usecase
-	uu := usecase.NewUserUsecase(pr, rsr, rur, *logger)
+	uu := user_usecase.NewUserUsecase(pr, rsr, rur, *logger)
+
+	// middlewars
+	auth := middleware.NewAuthMiddleware(uu, *logger)
 
 	// delivery
 	router := mux.NewRouter()
-	delivery.SetUserRouting(router, uu, *logger)
+	user_delivery.SetUserRouting(router, uu, auth, *logger)
+	file_manager.SetFileRouting(router, uu, auth, *logger)
 
 	srv := &http.Server{
 		Handler:      router,

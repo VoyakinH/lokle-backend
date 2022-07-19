@@ -180,4 +180,5 @@ Temporary Items
 
 config.json
 dump.rdb
-vscode
+.vscode
+media

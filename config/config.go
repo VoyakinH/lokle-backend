@@ -30,6 +30,10 @@ type MailerConfig struct {
 	Password string
 }
 
+type FileConfig struct {
+	RootPath string
+}
+
 type TimeoutsConfig struct {
 	WriteTimeout   time.Duration
 	ReadTimeout    time.Duration
@@ -43,6 +47,7 @@ var (
 	Postgres     PostgresConfig
 	Mailer       MailerConfig
 	Timeouts     TimeoutsConfig
+	File         FileConfig
 )
 
 func SetConfig() {
@@ -79,6 +84,10 @@ func SetConfig() {
 	Mailer = MailerConfig{
 		Email:    viper.GetString(`mailer.email`),
 		Password: viper.GetString(`mailer.password`),
+	}
+
+	File = FileConfig{
+		RootPath: viper.GetString(`file.root_path`),
 	}
 
 	Timeouts = TimeoutsConfig{
