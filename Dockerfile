@@ -11,7 +11,7 @@ WORKDIR /usr/src/app
 # COPY . .
 COPY --from=build /api/bin/main .
 COPY --from=build /api/config.json .
-COPY --from=build /api/media ./media
+# COPY --from=build /api/media ./media
 
 EXPOSE 3001
 CMD ./main
