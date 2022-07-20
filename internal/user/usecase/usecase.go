@@ -198,13 +198,14 @@ func (uu *userUsecase) RepeatEmailVerification(ctx context.Context, credentials 
 	if err != nil || status != http.StatusOK {
 		return status, fmt.Errorf("UserUsecase.RepeatEmailVerification: %s", err)
 	}
+	if user.EmailVerified {
+		return http.StatusOK, nil
+	}
 
 	err = uu.createVerificationEmail(ctx, user)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("UserUsecase.RepeatEmailVerification: %s", err)
 	}
-
-	user.Password = ""
 
 	return http.StatusOK, nil
 }
