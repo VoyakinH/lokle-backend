@@ -24,11 +24,13 @@ type IUserUsecase interface {
 	CreateParentUser(context.Context, models.User) (models.User, int, error)
 	VerifyEmail(context.Context, string) (int, error)
 	RepeatEmailVerification(context.Context, models.Credentials) (int, error)
+	GetUserByID(context.Context, uint64) (models.User, int, error)
 	GetParentByID(context.Context, uint64) (models.Parent, int, error)
 	GetChildByID(context.Context, uint64) (models.Child, int, error)
 	CreateParentDirPath(context.Context, uint64, string) (string, int, error)
 	CreateChildDirPath(context.Context, uint64, string) (string, int, error)
 	CreateParent(context.Context, uint64) (models.Parent, int, error)
+	CreateManager(context.Context, models.User) (models.User, int, error)
 }
 
 type userUsecase struct {
@@ -154,26 +156,27 @@ func (uu *userUsecase) createVerificationEmail(ctx context.Context, parent model
 func (uu *userUsecase) CreateParentUser(ctx context.Context, parent models.User) (models.User, int, error) {
 	_, err := uu.psql.GetUserByEmail(ctx, parent.Email)
 	if err == nil {
-		return models.User{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParent: parent with same email already exists")
+		return models.User{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParentUser: parent with same email already exists")
 	} else if err != nil && err != pgx.ErrNoRows {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to check email in db with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParentUser: failed to check email in db with err: %s", err)
 	}
 
 	hashedPswd, err := hasher.HashAndSalt(parent.Password)
 	if err != nil {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to hash password with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParentUser: failed to hash password with err: %s", err)
 	}
 	parent.Password = hashedPswd
+	parent.Role = models.ParentRole
 
-	createdParent, err := uu.psql.CreateUserParent(ctx, parent)
+	createdParent, err := uu.psql.CreateUser(ctx, parent)
 	if err != nil {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent with err: %s", err)
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParentUser: failed to create parent with err: %s", err)
 	}
 
 	if !parent.EmailVerified {
 		err = uu.createVerificationEmail(ctx, createdParent)
 		if err != nil {
-			return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: %s", err)
+			return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParentUser: %s", err)
 		}
 	}
 
@@ -211,6 +214,16 @@ func (uu *userUsecase) RepeatEmailVerification(ctx context.Context, credentials 
 	}
 
 	return http.StatusOK, nil
+}
+
+func (uu *userUsecase) GetUserByID(ctx context.Context, uid uint64) (models.User, int, error) {
+	parent, err := uu.psql.GetUserByID(ctx, uid)
+	if err == pgx.ErrNoRows {
+		return models.User{}, http.StatusNotFound, fmt.Errorf("UserUsecase.GetUserByID: %s", err)
+	} else if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetUserByID: user not found")
+	}
+	return parent, http.StatusOK, nil
 }
 
 func (uu *userUsecase) GetParentByID(ctx context.Context, uid uint64) (models.Parent, int, error) {
@@ -255,4 +268,32 @@ func (uu *userUsecase) CreateParent(ctx context.Context, uid uint64) (models.Par
 		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent for user %d with err: %s", uid, err)
 	}
 	return createdParent, http.StatusOK, nil
+}
+
+func (uu *userUsecase) CreateManager(ctx context.Context, manager models.User) (models.User, int, error) {
+	_, err := uu.psql.GetUserByEmail(ctx, manager.Email)
+	if err == nil {
+		return models.User{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateManager: manager with same email already exists")
+	} else if err != nil && err != pgx.ErrNoRows {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateManager: failed to check email in db with err: %s", err)
+	}
+
+	hashedPswd, err := hasher.HashAndSalt(manager.Password)
+	if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateManager: failed to hash password with err: %s", err)
+	}
+	manager.Password = hashedPswd
+	manager.Role = models.ManagerRole
+
+	createdManager, err := uu.psql.CreateUser(ctx, manager)
+	if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateManager: failed to create parent with err: %s", err)
+	}
+	_, err = uu.psql.VerifyEmail(ctx, createdManager.Email)
+	if err != nil {
+		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.VerCreateManagerifyEmail: failed to verify email for manager %s with err: %s", createdManager.Email, err)
+	}
+	createdManager.EmailVerified = true
+
+	return createdManager, http.StatusOK, nil
 }

@@ -17,7 +17,7 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(in *jlexer.Lexer, out *ParentPassportRespList) {
+func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(in *jlexer.Lexer, out *RegReqRespList) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		in.Skip()
@@ -26,15 +26,15 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(in *jlexe
 		in.Delim('[')
 		if *out == nil {
 			if !in.IsDelim(']') {
-				*out = make(ParentPassportRespList, 0, 1)
+				*out = make(RegReqRespList, 0, 0)
 			} else {
-				*out = ParentPassportRespList{}
+				*out = RegReqRespList{}
 			}
 		} else {
 			*out = (*out)[:0]
 		}
 		for !in.IsDelim(']') {
-			var v1 ParentPassportResp
+			var v1 RegReqResp
 			(v1).UnmarshalEasyJSON(in)
 			*out = append(*out, v1)
 			in.WantComma()
@@ -45,7 +45,7 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(in *jlexe
 		in.Consumed()
 	}
 }
-func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels(out *jwriter.Writer, in ParentPassportRespList) {
+func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels(out *jwriter.Writer, in RegReqRespList) {
 	if in == nil && (out.Flags&jwriter.NilSliceAsEmpty) == 0 {
 		out.RawString("null")
 	} else {
@@ -61,29 +61,29 @@ func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels(out *jwri
 }
 
 // MarshalJSON supports json.Marshaler interface
-func (v ParentPassportRespList) MarshalJSON() ([]byte, error) {
+func (v RegReqRespList) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
-func (v ParentPassportRespList) MarshalEasyJSON(w *jwriter.Writer) {
+func (v RegReqRespList) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
-func (v *ParentPassportRespList) UnmarshalJSON(data []byte) error {
+func (v *RegReqRespList) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *ParentPassportRespList) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *RegReqRespList) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels(l, v)
 }
-func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(in *jlexer.Lexer, out *ParentPassportResp) {
+func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(in *jlexer.Lexer, out *RegReqResp) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -102,6 +102,10 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(in *jlex
 			continue
 		}
 		switch key {
+		case "id":
+			out.ID = uint64(in.Uint64())
+		case "user_id":
+			out.UserID = uint64(in.Uint64())
 		case "type":
 			out.Type = string(in.String())
 		case "status":
@@ -120,13 +124,23 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(in *jlex
 		in.Consumed()
 	}
 }
-func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels1(out *jwriter.Writer, in ParentPassportResp) {
+func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels1(out *jwriter.Writer, in RegReqResp) {
 	out.RawByte('{')
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"type\":"
+		const prefix string = ",\"id\":"
 		out.RawString(prefix[1:])
+		out.Uint64(uint64(in.ID))
+	}
+	{
+		const prefix string = ",\"user_id\":"
+		out.RawString(prefix)
+		out.Uint64(uint64(in.UserID))
+	}
+	{
+		const prefix string = ",\"type\":"
+		out.RawString(prefix)
 		out.String(string(in.Type))
 	}
 	{
@@ -148,29 +162,29 @@ func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels1(out *jwr
 }
 
 // MarshalJSON supports json.Marshaler interface
-func (v ParentPassportResp) MarshalJSON() ([]byte, error) {
+func (v RegReqResp) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels1(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
-func (v ParentPassportResp) MarshalEasyJSON(w *jwriter.Writer) {
+func (v RegReqResp) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels1(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
-func (v *ParentPassportResp) UnmarshalJSON(data []byte) error {
+func (v *RegReqResp) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *ParentPassportResp) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *RegReqResp) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels1(l, v)
 }
-func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels2(in *jlexer.Lexer, out *ParentPassportReqFull) {
+func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels2(in *jlexer.Lexer, out *RegReqFull) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -213,7 +227,7 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels2(in *jlex
 		in.Consumed()
 	}
 }
-func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels2(out *jwriter.Writer, in ParentPassportReqFull) {
+func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels2(out *jwriter.Writer, in RegReqFull) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -256,26 +270,26 @@ func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels2(out *jwr
 }
 
 // MarshalJSON supports json.Marshaler interface
-func (v ParentPassportReqFull) MarshalJSON() ([]byte, error) {
+func (v RegReqFull) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels2(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
-func (v ParentPassportReqFull) MarshalEasyJSON(w *jwriter.Writer) {
+func (v RegReqFull) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels2(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
-func (v *ParentPassportReqFull) UnmarshalJSON(data []byte) error {
+func (v *RegReqFull) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels2(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *ParentPassportReqFull) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *RegReqFull) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels2(l, v)
 }
 func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels3(in *jlexer.Lexer, out *ParentPassportReq) {
@@ -343,4 +357,150 @@ func (v *ParentPassportReq) UnmarshalJSON(data []byte) error {
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *ParentPassportReq) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels3(l, v)
+}
+func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels4(in *jlexer.Lexer, out *ChildSecondRegReq) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "child":
+			(out.Child).UnmarshalEasyJSON(in)
+		case "relationship":
+			out.Relationship = bool(in.Bool())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels4(out *jwriter.Writer, in ChildSecondRegReq) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"child\":"
+		out.RawString(prefix[1:])
+		(in.Child).MarshalEasyJSON(out)
+	}
+	{
+		const prefix string = ",\"relationship\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.Relationship))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v ChildSecondRegReq) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels4(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v ChildSecondRegReq) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels4(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *ChildSecondRegReq) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels4(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *ChildSecondRegReq) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels4(l, v)
+}
+func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels5(in *jlexer.Lexer, out *ChildFirstRegReq) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "child":
+			(out.Child).UnmarshalEasyJSON(in)
+		case "is_student":
+			out.IsStudent = bool(in.Bool())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels5(out *jwriter.Writer, in ChildFirstRegReq) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"child\":"
+		out.RawString(prefix[1:])
+		(in.Child).MarshalEasyJSON(out)
+	}
+	{
+		const prefix string = ",\"is_student\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.IsStudent))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v ChildFirstRegReq) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels5(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v ChildFirstRegReq) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels5(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *ChildFirstRegReq) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels5(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *ChildFirstRegReq) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels5(l, v)
 }

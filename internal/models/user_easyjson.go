@@ -366,7 +366,7 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels3(in *jlex
 			out.Password = string(in.String())
 		case "phone":
 			out.Phone = string(in.String())
-		case "pasport":
+		case "passport":
 			out.Passport = string(in.String())
 		case "passport_verified":
 			out.PassportVerified = bool(in.Bool())
@@ -437,7 +437,7 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels3(out *jwr
 		out.String(string(in.Phone))
 	}
 	{
-		const prefix string = ",\"pasport\":"
+		const prefix string = ",\"passport\":"
 		out.RawString(prefix)
 		out.String(string(in.Passport))
 	}
@@ -570,7 +570,7 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels5(in *jlex
 		}
 		switch key {
 		case "birth_date":
-			out.BirthDate = string(in.String())
+			out.BirthDate = uint64(in.Uint64())
 		case "done_stage":
 			out.DoneStage = Stage(in.Int8())
 		case "pasport":
@@ -598,7 +598,7 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels5(out *jwr
 	{
 		const prefix string = ",\"birth_date\":"
 		out.RawString(prefix[1:])
-		out.String(string(in.BirthDate))
+		out.Uint64(uint64(in.BirthDate))
 	}
 	{
 		const prefix string = ",\"done_stage\":"
@@ -651,7 +651,157 @@ func (v *ChildRes) UnmarshalJSON(data []byte) error {
 func (v *ChildRes) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels5(l, v)
 }
-func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(in *jlexer.Lexer, out *Child) {
+func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(in *jlexer.Lexer, out *ChildFullRes) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "role":
+			out.Role = string(in.String())
+		case "first_name":
+			out.FirstName = string(in.String())
+		case "second_name":
+			out.SecondName = string(in.String())
+		case "last_name":
+			out.LastName = string(in.String())
+		case "email":
+			out.Email = string(in.String())
+		case "email_verified":
+			out.EmailVerified = bool(in.Bool())
+		case "phone":
+			out.Phone = string(in.String())
+		case "birth_date":
+			out.BirthDate = uint64(in.Uint64())
+		case "done_stage":
+			out.DoneStage = Stage(in.Int8())
+		case "pasport":
+			out.Passport = string(in.String())
+		case "place_of_residence":
+			out.PlaceOfResidence = string(in.String())
+		case "place_of_registration":
+			out.PlaceOfRegistration = string(in.String())
+		case "dir_path":
+			out.DirPath = string(in.String())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwriter.Writer, in ChildFullRes) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"role\":"
+		out.RawString(prefix[1:])
+		out.String(string(in.Role))
+	}
+	{
+		const prefix string = ",\"first_name\":"
+		out.RawString(prefix)
+		out.String(string(in.FirstName))
+	}
+	{
+		const prefix string = ",\"second_name\":"
+		out.RawString(prefix)
+		out.String(string(in.SecondName))
+	}
+	{
+		const prefix string = ",\"last_name\":"
+		out.RawString(prefix)
+		out.String(string(in.LastName))
+	}
+	{
+		const prefix string = ",\"email\":"
+		out.RawString(prefix)
+		out.String(string(in.Email))
+	}
+	{
+		const prefix string = ",\"email_verified\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.EmailVerified))
+	}
+	{
+		const prefix string = ",\"phone\":"
+		out.RawString(prefix)
+		out.String(string(in.Phone))
+	}
+	{
+		const prefix string = ",\"birth_date\":"
+		out.RawString(prefix)
+		out.Uint64(uint64(in.BirthDate))
+	}
+	{
+		const prefix string = ",\"done_stage\":"
+		out.RawString(prefix)
+		out.Int8(int8(in.DoneStage))
+	}
+	{
+		const prefix string = ",\"pasport\":"
+		out.RawString(prefix)
+		out.String(string(in.Passport))
+	}
+	{
+		const prefix string = ",\"place_of_residence\":"
+		out.RawString(prefix)
+		out.String(string(in.PlaceOfResidence))
+	}
+	{
+		const prefix string = ",\"place_of_registration\":"
+		out.RawString(prefix)
+		out.String(string(in.PlaceOfRegistration))
+	}
+	{
+		const prefix string = ",\"dir_path\":"
+		out.RawString(prefix)
+		out.String(string(in.DirPath))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v ChildFullRes) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v ChildFullRes) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *ChildFullRes) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *ChildFullRes) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(l, v)
+}
+func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels7(in *jlexer.Lexer, out *Child) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -691,10 +841,10 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(in *jlex
 		case "phone":
 			out.Phone = string(in.String())
 		case "birth_date":
-			out.BirthDate = string(in.String())
+			out.BirthDate = uint64(in.Uint64())
 		case "done_stage":
 			out.DoneStage = Stage(in.Int8())
-		case "pasport":
+		case "passport":
 			out.Passport = string(in.String())
 		case "place_of_residence":
 			out.PlaceOfResidence = string(in.String())
@@ -712,7 +862,7 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(in *jlex
 		in.Consumed()
 	}
 }
-func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwriter.Writer, in Child) {
+func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels7(out *jwriter.Writer, in Child) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -769,7 +919,7 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwr
 	{
 		const prefix string = ",\"birth_date\":"
 		out.RawString(prefix)
-		out.String(string(in.BirthDate))
+		out.Uint64(uint64(in.BirthDate))
 	}
 	{
 		const prefix string = ",\"done_stage\":"
@@ -777,7 +927,7 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwr
 		out.Int8(int8(in.DoneStage))
 	}
 	{
-		const prefix string = ",\"pasport\":"
+		const prefix string = ",\"passport\":"
 		out.RawString(prefix)
 		out.String(string(in.Passport))
 	}
@@ -802,23 +952,23 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwr
 // MarshalJSON supports json.Marshaler interface
 func (v Child) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(&w, v)
+	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels7(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v Child) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(w, v)
+	easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels7(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *Child) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(&r, v)
+	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels7(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *Child) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(l, v)
+	easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels7(l, v)
 }

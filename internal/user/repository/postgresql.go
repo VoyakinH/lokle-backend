@@ -13,15 +13,21 @@ import (
 
 type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
+	GetUserByID(context.Context, uint64) (models.User, error)
 	GetParentByID(context.Context, uint64) (models.Parent, error)
 	GetChildByID(context.Context, uint64) (models.Child, error)
-	CreateUserParent(context.Context, models.User) (models.User, error)
+	CreateUser(context.Context, models.User) (models.User, error)
 	DeleteUser(context.Context, uint64) (models.User, error)
 	VerifyEmail(context.Context, string) (uint64, error)
 	CreateParent(context.Context, uint64) (models.Parent, error)
+	CreateChild(context.Context, uint64, uint64, models.Child) (models.Child, error)
 	CreateParentDirPath(context.Context, uint64, string) (string, error)
 	CreateChildDirPath(context.Context, uint64, string) (string, error)
 	UpdateParentPassport(context.Context, uint64, string) (string, error)
+	VerifyParentPassport(context.Context, uint64) error
+	VerifyStageForChild(context.Context, uint64, models.Stage) error
+	UpdateUserPswd(context.Context, uint64, string) error
+	UpdateChild(context.Context, models.Child) (models.Child, error)
 }
 
 type postgresqlRepository struct {
@@ -77,36 +83,34 @@ func (pr *postgresqlRepository) GetUserByEmail(ctx context.Context, email string
 	return user, nil
 }
 
-// first registration stage for parents
-// now parent haven't passport and other documents
-// so we create only default user with role Parent = 0
-func (pr *postgresqlRepository) CreateUserParent(ctx context.Context, parent models.User) (models.User, error) {
-	var createdParent models.User
+func (pr *postgresqlRepository) CreateUser(ctx context.Context, user models.User) (models.User, error) {
+	var createdUser models.User
 	err := pr.conn.QueryRow(
 		`INSERT INTO users (role, first_name, second_name, last_name, phone, email, password)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, first_name, second_name, last_name, phone, email, email_verified;`,
-		models.ParentRole,
-		parent.FirstName,
-		parent.SecondName,
-		parent.LastName,
-		parent.Phone,
-		parent.Email,
-		parent.Password,
+		RETURNING id, role, first_name, second_name, last_name, phone, email, email_verified;`,
+		user.Role,
+		user.FirstName,
+		user.SecondName,
+		user.LastName,
+		user.Phone,
+		user.Email,
+		user.Password,
 	).Scan(
-		&createdParent.ID,
-		&createdParent.FirstName,
-		&createdParent.SecondName,
-		&createdParent.LastName,
-		&createdParent.Phone,
-		&createdParent.Email,
-		&createdParent.EmailVerified,
+		&createdUser.ID,
+		&createdUser.Role,
+		&createdUser.FirstName,
+		&createdUser.SecondName,
+		&createdUser.LastName,
+		&createdUser.Phone,
+		&createdUser.Email,
+		&createdUser.EmailVerified,
 	)
 
 	if err != nil {
 		return models.User{}, err
 	}
-	return createdParent, nil
+	return createdUser, nil
 }
 
 func (pr *postgresqlRepository) DeleteUser(ctx context.Context, id uint64) (models.User, error) {
@@ -169,6 +173,67 @@ func (pr *postgresqlRepository) CreateParent(ctx context.Context, uid uint64) (m
 		return models.Parent{}, err
 	}
 	return createdParent, nil
+}
+
+func (pr *postgresqlRepository) CreateChild(ctx context.Context, uid uint64, pid uint64, child models.Child) (models.Child, error) {
+	var createdChild models.Child
+	err := pr.conn.QueryRow(
+		`INSERT INTO children (user_id, birth_date)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING
+		RETURNING id, user_id, birth_date;`,
+		uid,
+		child.BirthDate,
+	).Scan(
+		&createdChild.ID,
+		&createdChild.UserID,
+		&createdChild.BirthDate,
+	)
+
+	if err != nil && err != pgx.ErrNoRows {
+		return models.Child{}, err
+	}
+
+	var id uint64
+	err = pr.conn.QueryRow(
+		`INSERT INTO parents_children (parent_id, child_id)
+		VALUES ($1, $2)
+		RETURNING id;`,
+		pid,
+		createdChild.ID,
+	).Scan(
+		&id,
+	)
+
+	if err != nil {
+		return models.Child{}, err
+	}
+
+	return createdChild, nil
+}
+
+func (pr *postgresqlRepository) GetUserByID(ctx context.Context, uid uint64) (models.User, error) {
+	var user models.User
+	err := pr.conn.QueryRow(
+		`SELECT id, role, first_name, second_name, last_name, phone, email, email_verified, password
+		FROM users
+		WHERE id = $1;`,
+		uid,
+	).Scan(
+		&user.ID,
+		&user.Role,
+		&user.FirstName,
+		&user.SecondName,
+		&user.LastName,
+		&user.Phone,
+		&user.Email,
+		&user.EmailVerified,
+		&user.Password,
+	)
+	if err != nil {
+		return models.User{}, err
+	}
+	return user, nil
 }
 
 func (pr *postgresqlRepository) GetParentByID(ctx context.Context, uid uint64) (models.Parent, error) {
@@ -318,4 +383,78 @@ func (pr *postgresqlRepository) UpdateParentPassport(ctx context.Context, pid ui
 		return "", err
 	}
 	return updatedPassport, nil
+}
+
+func (pr *postgresqlRepository) VerifyParentPassport(ctx context.Context, uid uint64) error {
+	var updatedPid uint64
+	err := pr.conn.QueryRow(
+		`UPDATE parents
+		SET passport_verified = true
+		WHERE user_id = $1
+		RETURNING id;`,
+		uid,
+	).Scan(
+		&updatedPid,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *postgresqlRepository) VerifyStageForChild(ctx context.Context, uid uint64, completedStage models.Stage) error {
+	var updatedCid uint64
+	err := pr.conn.QueryRow(
+		`UPDATE children
+		SET done_stage = $2
+		WHERE user_id = $1
+		RETURNING id;`,
+		uid,
+		completedStage,
+	).Scan(
+		&updatedCid,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *postgresqlRepository) UpdateUserPswd(ctx context.Context, uid uint64, newPswd string) error {
+	var updatedUid uint64
+	err := pr.conn.QueryRow(
+		`UPDATE users
+		SET password = $2
+		WHERE id = $1
+		RETURNING id;`,
+		uid,
+		newPswd,
+	).Scan(
+		&updatedUid,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *postgresqlRepository) UpdateChild(ctx context.Context, child models.Child) (models.Child, error) {
+	var updatedChild models.Child
+	err := pr.conn.QueryRow(
+		`UPDATE children
+		SET () = ()
+		WHERE id = $1
+		RETURNING id;`,
+		child.ID,
+	).Scan(
+		&updatedChild,
+	)
+
+	if err != nil {
+		return models.Child{}, err
+	}
+	return updatedChild, nil
 }

@@ -18,7 +18,11 @@ type UserDelivery struct {
 	logger      logrus.Logger
 }
 
-func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware.AuthMiddleware, logger logrus.Logger) {
+func SetUserRouting(router *mux.Router,
+	uu usecase.IUserUsecase,
+	auth middleware.AuthMiddleware,
+	roleMw middleware.RoleMiddleware,
+	logger logrus.Logger) {
 	userDelivery := &UserDelivery{
 		userUseCase: uu,
 		logger:      logger,
@@ -33,6 +37,8 @@ func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware
 
 	userAPI.HandleFunc("/parent", userDelivery.SignupParent).Methods(http.MethodPost)
 	userAPI.Handle("/parent", auth.WithAuth(http.HandlerFunc(userDelivery.GetParent))).Methods(http.MethodGet)
+
+	userAPI.HandleFunc("/manager", userDelivery.SignupManager).Methods(http.MethodPost)
 
 	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
 	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
@@ -232,4 +238,25 @@ func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ioutils.Send(w, status, tools.ParentToParentRes(parent))
+}
+
+func (ud *UserDelivery) SignupManager(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var manager models.User
+	err := ioutils.ReadJSON(r, &manager)
+	if err != nil || manager.Email == "" || manager.Password == "" {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	createdManager, status, err := ud.userUseCase.CreateManager(ctx, manager)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, tools.UserToUserRes(createdManager))
 }

@@ -68,9 +68,9 @@ create table children
             on update cascade on delete cascade,
     birth_date            bigint             not null,
     done_stage            smallint default 0 not null,
-    passport              varchar(64) default ''::character varying,
-    place_of_residence    varchar(128)       not null,
-    place_of_registration varchar(128)       not null,
+    passport              varchar(64)  default ''::character varying,
+    place_of_residence    varchar(128) default ''::character varying,
+    place_of_registration varchar(128) default ''::character varying,
     dir_path              varchar(128) default ''::character varying
 );
 
@@ -100,7 +100,7 @@ create table parents_children
         constraint parents_children_children_id_fk
             references children
             on update cascade on delete cascade,
-    relationship varchar(16) not null
+    relationship varchar(16)
 );
 
 alter table parents_children

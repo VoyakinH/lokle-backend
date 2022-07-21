@@ -43,7 +43,7 @@ func main() {
 
 	// delivery
 	router := mux.NewRouter()
-	user_delivery.SetUserRouting(router, uu, auth, *logger)
+	user_delivery.SetUserRouting(router, uu, auth, roleMw, *logger)
 	reg_req_delivery.SetRegReqRouting(router, rru, auth, roleMw, *logger)
 	file_manager.SetFileRouting(router, uu, auth, *logger)
 

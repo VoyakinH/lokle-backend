@@ -4,12 +4,24 @@ type RegReqType int8
 
 const (
 	ParentPassportVerification RegReqType = iota
+	ChildFirstStageForStudent
+	ChildFirstStage
+	ChildSecondStage
+	ChildThirdStage
 )
 
 func (r RegReqType) String() string {
 	switch r {
 	case ParentPassportVerification:
 		return "Подтверждение паспорта родителя"
+	case ChildFirstStageForStudent:
+		return "Регистрация ребенка (этап 1 / старый ученик)"
+	case ChildFirstStage:
+		return "Регистрация ребенка (этап 1 / новый ученик)"
+	case ChildSecondStage:
+		return "Регистрация ребенка (этап 2)"
+	case ChildThirdStage:
+		return "Регистрация ребенка (этап 3)"
 	}
 	return "UNKNOWN"
 }
@@ -20,7 +32,19 @@ type ParentPassportReq struct {
 }
 
 //easyjson:json
-type ParentPassportReqFull struct {
+type ChildFirstRegReq struct {
+	Child     Child `json:"child"`
+	IsStudent bool  `json:"is_student"`
+}
+
+//easyjson:json
+type ChildSecondRegReq struct {
+	Child        Child `json:"child"`
+	Relationship bool  `json:"relationship"`
+}
+
+//easyjson:json
+type RegReqFull struct {
 	ID         uint64     `json:"id"`
 	UserID     uint64     `json:"user_id"`
 	ManagerID  uint64     `json:"manager_id"`
@@ -31,7 +55,9 @@ type ParentPassportReqFull struct {
 }
 
 //easyjson:json
-type ParentPassportResp struct {
+type RegReqResp struct {
+	ID         uint64 `json:"id"`
+	UserID     uint64 `json:"user_id"`
 	Type       string `json:"type"`
 	Status     string `json:"status"`
 	CreateTime uint64 `json:"create_time"`
@@ -39,4 +65,4 @@ type ParentPassportResp struct {
 }
 
 //easyjson:json
-type ParentPassportRespList []ParentPassportResp
+type RegReqRespList []RegReqResp

@@ -22,6 +22,24 @@ func ParentToParentRes(parent models.Parent) models.ParentRes {
 	}
 }
 
+func ChildToChildFullRes(child models.Child) models.ChildFullRes {
+	return models.ChildFullRes{
+		Role:                child.Role.String(),
+		FirstName:           child.FirstName,
+		SecondName:          child.SecondName,
+		LastName:            child.LastName,
+		Email:               child.Email,
+		EmailVerified:       child.EmailVerified,
+		Phone:               child.Phone,
+		BirthDate:           child.BirthDate,
+		DoneStage:           child.DoneStage,
+		Passport:            child.Passport,
+		PlaceOfResidence:    child.PlaceOfResidence,
+		PlaceOfRegistration: child.PlaceOfRegistration,
+		DirPath:             child.DirPath,
+	}
+}
+
 func ChildToChildRes(child models.Child) models.ChildRes {
 	return models.ChildRes{
 		BirthDate:           child.BirthDate,
@@ -33,10 +51,26 @@ func ChildToChildRes(child models.Child) models.ChildRes {
 	}
 }
 
-func FullParentPassportReqToSimpleList(reqs []models.ParentPassportReqFull) models.ParentPassportRespList {
-	var respList models.ParentPassportRespList
+func ChildToUser(child models.Child) models.User {
+	return models.User{
+		ID:            child.ID,
+		Role:          child.Role,
+		FirstName:     child.FirstName,
+		SecondName:    child.SecondName,
+		LastName:      child.LastName,
+		Email:         child.Email,
+		EmailVerified: child.EmailVerified,
+		Password:      child.Password,
+		Phone:         child.Phone,
+	}
+}
+
+func FullRegReqToSimpleRespList(reqs []models.RegReqFull) models.RegReqRespList {
+	var respList models.RegReqRespList
 	for _, req := range reqs {
-		respList = append(respList, models.ParentPassportResp{
+		respList = append(respList, models.RegReqResp{
+			ID:         req.ID,
+			UserID:     req.UserID,
 			Type:       req.Type.String(),
 			Status:     req.Status,
 			CreateTime: req.CreateTime,

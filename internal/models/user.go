@@ -97,7 +97,7 @@ type Child struct {
 	EmailVerified       bool   `json:"email_verified"`
 	Password            string `json:"password"`
 	Phone               string `json:"phone"`
-	BirthDate           string `json:"birth_date"`
+	BirthDate           uint64 `json:"birth_date"`
 	DoneStage           Stage  `json:"done_stage"`
 	Passport            string `json:"passport"`
 	PlaceOfResidence    string `json:"place_of_residence"`
@@ -106,8 +106,25 @@ type Child struct {
 }
 
 //easyjson:json
+type ChildFullRes struct {
+	Role                string `json:"role"`
+	FirstName           string `json:"first_name"`
+	SecondName          string `json:"second_name"`
+	LastName            string `json:"last_name"`
+	Email               string `json:"email"`
+	EmailVerified       bool   `json:"email_verified"`
+	Phone               string `json:"phone"`
+	BirthDate           uint64 `json:"birth_date"`
+	DoneStage           Stage  `json:"done_stage"`
+	Passport            string `json:"pasport"`
+	PlaceOfResidence    string `json:"place_of_residence"`
+	PlaceOfRegistration string `json:"place_of_registration"`
+	DirPath             string `json:"dir_path"`
+}
+
+//easyjson:json
 type ChildRes struct {
-	BirthDate           string `json:"birth_date"`
+	BirthDate           uint64 `json:"birth_date"`
 	DoneStage           Stage  `json:"done_stage"`
 	Passport            string `json:"pasport"`
 	PlaceOfResidence    string `json:"place_of_residence"`

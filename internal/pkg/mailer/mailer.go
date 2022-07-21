@@ -21,3 +21,18 @@ func SendVerifiedEmail(to_email string, first_name string, second_name string, t
 	}
 	return nil
 }
+
+func SendCompleteChildRegistrationEmail(to_email string, first_name string, second_name string, password string) error {
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", config.Mailer.Email)
+	msg.SetHeader("To", to_email)
+	msg.SetHeader("Subject", "Регистрация Столичный-КИТ")
+	msg.SetBody("text/html", fmt.Sprintf("Приветствуем, %s %s! <br/> Ваши данные для входа: <br/>  Логин: %s <br/> Пароль: %s <br/> Если Вы получили это письмо по ошибке, просто игнорируйте его. <br/>", first_name, second_name, to_email, password))
+
+	n := gomail.NewDialer("smtp.mail.ru", 465, config.Mailer.Email, config.Mailer.Password)
+
+	if err := n.DialAndSend(msg); err != nil {
+		return err
+	}
+	return nil
+}
