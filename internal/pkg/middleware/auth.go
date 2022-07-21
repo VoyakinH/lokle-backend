@@ -4,15 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/VoyakinH/lokle_backend/internal/pkg/ctx_utils"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/ioutils"
 	"github.com/VoyakinH/lokle_backend/internal/user/usecase"
 	"github.com/sirupsen/logrus"
-)
-
-type CtxKey int
-
-const (
-	CtxUser CtxKey = iota
 )
 
 type AuthMiddleware struct {
@@ -45,7 +40,7 @@ func (am AuthMiddleware) WithAuth(h http.Handler) http.Handler {
 			return
 		}
 
-		r = r.WithContext(context.WithValue(r.Context(), CtxUser, &user))
+		r = r.WithContext(context.WithValue(r.Context(), ctx_utils.CtxUser, &user))
 
 		h.ServeHTTP(w, r)
 	})

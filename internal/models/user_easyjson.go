@@ -266,20 +266,6 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels2(in *jlex
 			continue
 		}
 		switch key {
-		case "role":
-			out.Role = string(in.String())
-		case "first_name":
-			out.FirstName = string(in.String())
-		case "second_name":
-			out.SecondName = string(in.String())
-		case "last_name":
-			out.LastName = string(in.String())
-		case "email":
-			out.Email = string(in.String())
-		case "email_verified":
-			out.EmailVerified = bool(in.Bool())
-		case "phone":
-			out.Phone = string(in.String())
 		case "pasport":
 			out.Passport = string(in.String())
 		case "passport_verified":
@@ -301,43 +287,8 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels2(out *jwr
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"role\":"
-		out.RawString(prefix[1:])
-		out.String(string(in.Role))
-	}
-	{
-		const prefix string = ",\"first_name\":"
-		out.RawString(prefix)
-		out.String(string(in.FirstName))
-	}
-	{
-		const prefix string = ",\"second_name\":"
-		out.RawString(prefix)
-		out.String(string(in.SecondName))
-	}
-	{
-		const prefix string = ",\"last_name\":"
-		out.RawString(prefix)
-		out.String(string(in.LastName))
-	}
-	{
-		const prefix string = ",\"email\":"
-		out.RawString(prefix)
-		out.String(string(in.Email))
-	}
-	{
-		const prefix string = ",\"email_verified\":"
-		out.RawString(prefix)
-		out.Bool(bool(in.EmailVerified))
-	}
-	{
-		const prefix string = ",\"phone\":"
-		out.RawString(prefix)
-		out.String(string(in.Phone))
-	}
-	{
 		const prefix string = ",\"pasport\":"
-		out.RawString(prefix)
+		out.RawString(prefix[1:])
 		out.String(string(in.Passport))
 	}
 	{
@@ -618,20 +569,6 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels5(in *jlex
 			continue
 		}
 		switch key {
-		case "role":
-			out.Role = string(in.String())
-		case "first_name":
-			out.FirstName = string(in.String())
-		case "second_name":
-			out.SecondName = string(in.String())
-		case "last_name":
-			out.LastName = string(in.String())
-		case "email":
-			out.Email = string(in.String())
-		case "email_verified":
-			out.EmailVerified = bool(in.Bool())
-		case "phone":
-			out.Phone = string(in.String())
 		case "birth_date":
 			out.BirthDate = string(in.String())
 		case "done_stage":
@@ -659,43 +596,8 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels5(out *jwr
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"role\":"
-		out.RawString(prefix[1:])
-		out.String(string(in.Role))
-	}
-	{
-		const prefix string = ",\"first_name\":"
-		out.RawString(prefix)
-		out.String(string(in.FirstName))
-	}
-	{
-		const prefix string = ",\"second_name\":"
-		out.RawString(prefix)
-		out.String(string(in.SecondName))
-	}
-	{
-		const prefix string = ",\"last_name\":"
-		out.RawString(prefix)
-		out.String(string(in.LastName))
-	}
-	{
-		const prefix string = ",\"email\":"
-		out.RawString(prefix)
-		out.String(string(in.Email))
-	}
-	{
-		const prefix string = ",\"email_verified\":"
-		out.RawString(prefix)
-		out.Bool(bool(in.EmailVerified))
-	}
-	{
-		const prefix string = ",\"phone\":"
-		out.RawString(prefix)
-		out.String(string(in.Phone))
-	}
-	{
 		const prefix string = ",\"birth_date\":"
-		out.RawString(prefix)
+		out.RawString(prefix[1:])
 		out.String(string(in.BirthDate))
 	}
 	{

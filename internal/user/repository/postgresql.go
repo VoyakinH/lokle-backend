@@ -21,6 +21,7 @@ type IPostgresqlRepository interface {
 	CreateParent(context.Context, uint64) (models.Parent, error)
 	CreateParentDirPath(context.Context, uint64, string) (string, error)
 	CreateChildDirPath(context.Context, uint64, string) (string, error)
+	UpdateParentPassport(context.Context, uint64, string) (string, error)
 }
 
 type postgresqlRepository struct {
@@ -298,4 +299,23 @@ func (pr *postgresqlRepository) CreateChildDirPath(ctx context.Context, cid uint
 		return "", err
 	}
 	return insertedDirPath, nil
+}
+
+func (pr *postgresqlRepository) UpdateParentPassport(ctx context.Context, pid uint64, passport string) (string, error) {
+	var updatedPassport string
+	err := pr.conn.QueryRow(
+		`UPDATE parents
+		SET passport = $2
+		WHERE id = $1
+		RETURNING passport;`,
+		pid,
+		passport,
+	).Scan(
+		&updatedPassport,
+	)
+
+	if err != nil {
+		return "", err
+	}
+	return updatedPassport, nil
 }

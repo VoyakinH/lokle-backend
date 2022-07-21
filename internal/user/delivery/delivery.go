@@ -32,7 +32,7 @@ func SetUserRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware
 	userAPI.Handle("/auth", auth.WithAuth(http.HandlerFunc(userDelivery.CheckUserSession))).Methods(http.MethodGet)
 
 	userAPI.HandleFunc("/parent", userDelivery.SignupParent).Methods(http.MethodPost)
-	userAPI.HandleFunc("/parent", userDelivery.GetParent).Methods(http.MethodGet)
+	userAPI.Handle("/parent", auth.WithAuth(http.HandlerFunc(userDelivery.GetParent))).Methods(http.MethodGet)
 
 	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
 	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
@@ -153,7 +153,7 @@ func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdParent, status, err := ud.userUseCase.CreateParent(ctx, parent)
+	createdParent, status, err := ud.userUseCase.CreateParentUser(ctx, parent)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -205,5 +205,31 @@ func (ud *UserDelivery) RepeatEmailVerification(w http.ResponseWriter, r *http.R
 }
 
 func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := ctx_utils.GetUser(ctx)
+	if user == nil {
+		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
 
+	parent, status, err := ud.userUseCase.GetParentByID(ctx, user.ID)
+	// if parent for created user not found and email verified
+	// we try to create parent without email verification
+	if status == http.StatusNotFound {
+		ud.logger.Errorf("%s parent not found for user <%d:%s> [status=%d]", r.URL, user.ID, user.Email, http.StatusNotFound)
+		parent, status, err = ud.userUseCase.CreateParent(ctx, user.ID)
+		if err != nil || status != http.StatusOK {
+			ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+			ioutils.SendError(w, status, "internal")
+			return
+		}
+	}
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, tools.ParentToParentRes(parent))
 }

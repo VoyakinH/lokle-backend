@@ -21,13 +21,14 @@ type IUserUsecase interface {
 	CheckSession(context.Context, string) (models.User, int, error)
 	ProlongSession(context.Context, string, time.Duration) (int, error)
 	CheckUser(context.Context, models.Credentials) (models.User, int, error)
-	CreateParent(context.Context, models.User) (models.User, int, error)
+	CreateParentUser(context.Context, models.User) (models.User, int, error)
 	VerifyEmail(context.Context, string) (int, error)
 	RepeatEmailVerification(context.Context, models.Credentials) (int, error)
 	GetParentByID(context.Context, uint64) (models.Parent, int, error)
 	GetChildByID(context.Context, uint64) (models.Child, int, error)
 	CreateParentDirPath(context.Context, uint64, string) (string, int, error)
 	CreateChildDirPath(context.Context, uint64, string) (string, int, error)
+	CreateParent(context.Context, uint64) (models.Parent, int, error)
 }
 
 type userUsecase struct {
@@ -150,7 +151,7 @@ func (uu *userUsecase) createVerificationEmail(ctx context.Context, parent model
 	return nil
 }
 
-func (uu *userUsecase) CreateParent(ctx context.Context, parent models.User) (models.User, int, error) {
+func (uu *userUsecase) CreateParentUser(ctx context.Context, parent models.User) (models.User, int, error) {
 	_, err := uu.psql.GetUserByEmail(ctx, parent.Email)
 	if err == nil {
 		return models.User{}, http.StatusConflict, fmt.Errorf("UserUsecase.CreateParent: parent with same email already exists")
@@ -169,9 +170,11 @@ func (uu *userUsecase) CreateParent(ctx context.Context, parent models.User) (mo
 		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent with err: %s", err)
 	}
 
-	err = uu.createVerificationEmail(ctx, createdParent)
-	if err != nil {
-		return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: %s", err)
+	if !parent.EmailVerified {
+		err = uu.createVerificationEmail(ctx, createdParent)
+		if err != nil {
+			return models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: %s", err)
+		}
 	}
 
 	return createdParent, http.StatusOK, nil
@@ -212,15 +215,19 @@ func (uu *userUsecase) RepeatEmailVerification(ctx context.Context, credentials 
 
 func (uu *userUsecase) GetParentByID(ctx context.Context, uid uint64) (models.Parent, int, error) {
 	parent, err := uu.psql.GetParentByID(ctx, uid)
-	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: %s", err)
+	if err == pgx.ErrNoRows {
+		return models.Parent{}, http.StatusNotFound, fmt.Errorf("UserUsecase.GetParentByID: %s", err)
+	} else if err != nil {
+		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: parent not found")
 	}
 	return parent, http.StatusOK, nil
 }
 
 func (uu *userUsecase) GetChildByID(ctx context.Context, uid uint64) (models.Child, int, error) {
 	child, err := uu.psql.GetChildByID(ctx, uid)
-	if err != nil {
+	if err == pgx.ErrNoRows {
+		return models.Child{}, http.StatusNotFound, fmt.Errorf("UserUsecase.GetChildByID: child not found")
+	} else if err != nil {
 		return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: %s", err)
 	}
 	return child, http.StatusOK, nil
@@ -240,4 +247,12 @@ func (uu *userUsecase) CreateChildDirPath(ctx context.Context, cid uint64, path 
 		return "", http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateChildDirPath: %s", err)
 	}
 	return insertedDirPath, http.StatusOK, nil
+}
+
+func (uu *userUsecase) CreateParent(ctx context.Context, uid uint64) (models.Parent, int, error) {
+	createdParent, err := uu.psql.CreateParent(ctx, uid)
+	if err != nil {
+		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParent: failed to create parent for user %d with err: %s", uid, err)
+	}
+	return createdParent, http.StatusOK, nil
 }
