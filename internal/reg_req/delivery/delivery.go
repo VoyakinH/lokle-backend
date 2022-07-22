@@ -37,12 +37,13 @@ func SetRegReqRouting(router *mux.Router,
 	regReqParentAPI.HandleFunc("/passport", regReqDelivery.CreateVerifyParentPassportReq).Methods(http.MethodPost)
 	regReqParentAPI.HandleFunc("/list", regReqDelivery.GetParentRegRequests).Methods(http.MethodGet)
 
-	regReqChildAPI := router.PathPrefix("/api/v1/reg/request/child").Subrouter()
+	regReqChildAPI := router.PathPrefix("/api/v1/reg/request/child/stage").Subrouter()
 	regReqChildAPI.Use(middleware.WithJSON)
 	regReqChildAPI.Use(auth.WithAuth)
 
-	regReqChildAPI.Handle("/stage/first", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FirstSignupChild))).Methods(http.MethodPost)
-	regReqChildAPI.Handle("/stage/second", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.SecondSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/first", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FirstSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/second", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.SecondSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/third", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.ThirdSignupChild))).Methods(http.MethodPost)
 
 	regReqCompleteAPI := router.PathPrefix("/api/v1/reg/request").Subrouter()
 	regReqCompleteAPI.Use(middleware.WithJSON)
@@ -143,6 +144,33 @@ func (rrd *RegReqDelivery) SecondSignupChild(w http.ResponseWriter, r *http.Requ
 	}
 
 	createdReq, status, err := rrd.regReqUseCase.SecondRegistrationChildStage(ctx, childReq, *parent)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, tools.FullRegReqToSimpleResp(createdReq))
+}
+
+func (rrd *RegReqDelivery) ThirdSignupChild(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		rrd.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var childReq models.ChildThirdRegReq
+	err := ioutils.ReadJSON(r, &childReq)
+	if err != nil {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	createdReq, status, err := rrd.regReqUseCase.ThirdRegistrationChildStage(ctx, childReq, *parent)
 	if err != nil || status != http.StatusOK {
 		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")

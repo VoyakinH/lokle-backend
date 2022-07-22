@@ -38,7 +38,7 @@ func (rm RoleMiddleware) CheckParent(h http.Handler) http.Handler {
 			return
 		}
 
-		parent, status, err := rm.UserUseCase.GetParentByID(ctx, user.ID)
+		parent, status, err := rm.UserUseCase.GetParentByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
 			rm.logger.Errorf("%s get parent from db failed with [status=%d] [error=%s]", r.URL, status, err)
 			ioutils.SendError(w, status, "internal")
@@ -66,7 +66,7 @@ func (rm RoleMiddleware) CheckChild(h http.Handler) http.Handler {
 			return
 		}
 
-		child, status, err := rm.UserUseCase.GetChildByID(ctx, user.ID)
+		child, status, err := rm.UserUseCase.GetChildByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
 			rm.logger.Errorf("%s get child from db failed with [status=%d] [error=%s]", r.URL, status, err)
 			ioutils.SendError(w, status, "internal")

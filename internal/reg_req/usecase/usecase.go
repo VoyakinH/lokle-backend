@@ -22,6 +22,7 @@ type IRegReqUsecase interface {
 	CreateChild(context.Context, models.ChildFirstRegReq, uint64) (models.Child, int, error)
 	CompleteRegReq(context.Context, uint64) (int, error)
 	SecondRegistrationChildStage(context.Context, models.ChildSecondRegReq, models.Parent) (models.RegReqFull, int, error)
+	ThirdRegistrationChildStage(context.Context, models.ChildThirdRegReq, models.Parent) (models.RegReqFull, int, error)
 }
 
 type regReqUsecase struct {
@@ -127,7 +128,7 @@ func (rru *regReqUsecase) CreateChild(ctx context.Context, childReq models.Child
 }
 
 func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, childReq models.ChildSecondRegReq, parent models.Parent) (models.RegReqFull, int, error) {
-	child, err := rru.userPsql.GetChildByID(ctx, childReq.Child.ID)
+	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
 	if err != nil {
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child data with err: %s", err)
 	}
@@ -155,6 +156,30 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 	req, err := rru.psql.CreateRegReq(ctx, child.UserID, models.ChildSecondStage)
 	if err != nil {
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to create verification request with err: %s", err)
+	}
+
+	return req, http.StatusOK, nil
+}
+
+func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, childReq models.ChildThirdRegReq, parent models.Parent) (models.RegReqFull, int, error) {
+	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child data with err: %s", err)
+	}
+
+	respList, err := rru.psql.GetRegRequestList(ctx, child.UserID)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child's requests: %s", err)
+	}
+	for _, existsReq := range respList {
+		if existsReq.Type == models.ChildThirdStage && existsReq.Status == "pending" {
+			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: child has already created this request")
+		}
+	}
+
+	req, err := rru.psql.CreateRegReq(ctx, child.UserID, models.ChildThirdStage)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to create verification request with err: %s", err)
 	}
 
 	return req, http.StatusOK, nil

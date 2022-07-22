@@ -25,12 +25,15 @@ type IUserUsecase interface {
 	VerifyEmail(context.Context, string) (int, error)
 	RepeatEmailVerification(context.Context, models.Credentials) (int, error)
 	GetUserByID(context.Context, uint64) (models.User, int, error)
-	GetParentByID(context.Context, uint64) (models.Parent, int, error)
-	GetChildByID(context.Context, uint64) (models.Child, int, error)
+	GetParentByUID(context.Context, uint64) (models.Parent, int, error)
+	GetChildByUID(context.Context, uint64) (models.Child, int, error)
 	CreateParentDirPath(context.Context, uint64, string) (string, int, error)
 	CreateChildDirPath(context.Context, uint64, string) (string, int, error)
 	CreateParent(context.Context, uint64) (models.Parent, int, error)
 	CreateManager(context.Context, models.User) (models.User, int, error)
+	CheckParentChild(context.Context, uint64, uint64) (bool, int, error)
+	GetParentChildren(context.Context, uint64) (models.ChildWithRegReqList, int, error)
+	GetManagers(context.Context) ([]models.User, int, error)
 }
 
 type userUsecase struct {
@@ -226,8 +229,8 @@ func (uu *userUsecase) GetUserByID(ctx context.Context, uid uint64) (models.User
 	return parent, http.StatusOK, nil
 }
 
-func (uu *userUsecase) GetParentByID(ctx context.Context, uid uint64) (models.Parent, int, error) {
-	parent, err := uu.psql.GetParentByID(ctx, uid)
+func (uu *userUsecase) GetParentByUID(ctx context.Context, uid uint64) (models.Parent, int, error) {
+	parent, err := uu.psql.GetParentByUID(ctx, uid)
 	if err == pgx.ErrNoRows {
 		return models.Parent{}, http.StatusNotFound, fmt.Errorf("UserUsecase.GetParentByID: %s", err)
 	} else if err != nil {
@@ -236,8 +239,8 @@ func (uu *userUsecase) GetParentByID(ctx context.Context, uid uint64) (models.Pa
 	return parent, http.StatusOK, nil
 }
 
-func (uu *userUsecase) GetChildByID(ctx context.Context, uid uint64) (models.Child, int, error) {
-	child, err := uu.psql.GetChildByID(ctx, uid)
+func (uu *userUsecase) GetChildByUID(ctx context.Context, uid uint64) (models.Child, int, error) {
+	child, err := uu.psql.GetChildByUID(ctx, uid)
 	if err == pgx.ErrNoRows {
 		return models.Child{}, http.StatusNotFound, fmt.Errorf("UserUsecase.GetChildByID: child not found")
 	} else if err != nil {
@@ -296,4 +299,28 @@ func (uu *userUsecase) CreateManager(ctx context.Context, manager models.User) (
 	createdManager.EmailVerified = true
 
 	return createdManager, http.StatusOK, nil
+}
+
+func (uu *userUsecase) CheckParentChild(ctx context.Context, pid uint64, cid uint64) (bool, int, error) {
+	isParentChild, err := uu.psql.CheckParentChildren(ctx, pid, cid)
+	if err != nil {
+		return false, http.StatusInternalServerError, fmt.Errorf("UserUsecase.CheckParentChild: %s", err)
+	}
+	return isParentChild, http.StatusOK, nil
+}
+
+func (uu *userUsecase) GetParentChildren(ctx context.Context, pid uint64) (models.ChildWithRegReqList, int, error) {
+	respList, err := uu.psql.GetParentChildren(ctx, pid)
+	if err != nil {
+		return models.ChildWithRegReqList{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentChildren: %s", err)
+	}
+	return respList, http.StatusOK, nil
+}
+
+func (uu *userUsecase) GetManagers(ctx context.Context) ([]models.User, int, error) {
+	respList, err := uu.psql.GetManagers(ctx)
+	if err != nil {
+		return []models.User{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetManagers: %s", err)
+	}
+	return respList, http.StatusOK, nil
 }

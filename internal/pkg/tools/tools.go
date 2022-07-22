@@ -4,6 +4,7 @@ import "github.com/VoyakinH/lokle_backend/internal/models"
 
 func UserToUserRes(user models.User) models.UserRes {
 	return models.UserRes{
+		ID:            user.ID,
 		Role:          user.Role.String(),
 		FirstName:     user.FirstName,
 		SecondName:    user.SecondName,
@@ -12,6 +13,14 @@ func UserToUserRes(user models.User) models.UserRes {
 		EmailVerified: user.EmailVerified,
 		Phone:         user.Phone,
 	}
+}
+
+func UsersToUserResList(users []models.User) models.UserResList {
+	var resp models.UserResList
+	for _, user := range users {
+		resp = append(resp, UserToUserRes(user))
+	}
+	return resp
 }
 
 func ParentToParentRes(parent models.Parent) models.ParentRes {

@@ -14,7 +14,7 @@ import (
 type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
 	GetUserByID(context.Context, uint64) (models.User, error)
-	GetParentByID(context.Context, uint64) (models.Parent, error)
+	GetParentByUID(context.Context, uint64) (models.Parent, error)
 	GetChildByUID(context.Context, uint64) (models.Child, error)
 	GetChildByID(context.Context, uint64) (models.Child, error)
 	CreateUser(context.Context, models.User) (models.User, error)
@@ -30,6 +30,9 @@ type IPostgresqlRepository interface {
 	UpdateUserPswd(context.Context, uint64, string) error
 	UpdateChild(context.Context, models.Child) error
 	UpdateParentChildRelationship(context.Context, uint64, uint64, string) error
+	CheckParentChildren(context.Context, uint64, uint64) (bool, error)
+	GetParentChildren(context.Context, uint64) (models.ChildWithRegReqList, error)
+	GetManagers(context.Context) ([]models.User, error)
 }
 
 type postgresqlRepository struct {
@@ -238,7 +241,7 @@ func (pr *postgresqlRepository) GetUserByID(ctx context.Context, uid uint64) (mo
 	return user, nil
 }
 
-func (pr *postgresqlRepository) GetParentByID(ctx context.Context, uid uint64) (models.Parent, error) {
+func (pr *postgresqlRepository) GetParentByUID(ctx context.Context, uid uint64) (models.Parent, error) {
 	var parent models.Parent
 	err := pr.conn.QueryRow(
 		`SELECT
@@ -497,9 +500,9 @@ func (pr *postgresqlRepository) UpdateChild(ctx context.Context, child models.Ch
 	err := pr.conn.QueryRow(
 		`UPDATE children
 		SET (passport, place_of_residence, place_of_registration) = ($2, $3, $4)
-		WHERE id = $1
+		WHERE user_id = $1
 		RETURNING id;`,
-		child.ID,
+		child.UserID,
 		child.Passport,
 		child.PlaceOfResidence,
 		child.PlaceOfRegistration,
@@ -531,4 +534,171 @@ func (pr *postgresqlRepository) UpdateParentChildRelationship(ctx context.Contex
 		return err
 	}
 	return nil
+}
+
+func (pr *postgresqlRepository) CheckParentChildren(ctx context.Context, pid uint64, cid uint64) (bool, error) {
+	var id uint64
+	err := pr.conn.QueryRow(
+		`SELECT id
+		FROM parents_children
+		WHERE parent_id = $1 AND child_id = $2;`,
+		pid,
+		cid,
+	).Scan(
+		&id,
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+type regReqWithNull struct {
+	ID         *uint64
+	UserID     *uint64
+	Type       *models.RegReqType
+	Status     *string
+	CreateTime *uint64
+	Message    *string
+}
+
+func (rrwn *regReqWithNull) convertToRegReq() *models.RegReqResp {
+	result := &models.RegReqResp{}
+	isEmpty := true
+	if rrwn.ID != nil {
+		result.ID = *rrwn.ID
+		isEmpty = false
+	}
+	if rrwn.UserID != nil {
+		result.UserID = *rrwn.UserID
+		isEmpty = false
+	}
+	if rrwn.Type != nil {
+		result.Type = (*rrwn.Type).String()
+		isEmpty = false
+	}
+	if rrwn.Status != nil {
+		result.Status = *rrwn.Status
+		isEmpty = false
+	}
+	if rrwn.CreateTime != nil {
+		result.CreateTime = *rrwn.CreateTime
+		isEmpty = false
+	}
+	if rrwn.Message != nil {
+		result.Message = *rrwn.Message
+		isEmpty = false
+	}
+	if isEmpty {
+		return nil
+	}
+	return result
+}
+
+func (pr *postgresqlRepository) GetParentChildren(ctx context.Context, pid uint64) (models.ChildWithRegReqList, error) {
+	rows, err := pr.conn.Query(
+		`SELECT
+			c.id,
+			c.user_id,
+			us.role,
+			us.first_name,
+			us.second_name,
+			us.last_name,
+			us.phone,
+			us.email,
+			us.email_verified,
+			c.birth_date,
+			c.done_stage,
+			c.place_of_residence,
+			c.place_of_registration,
+			rr.id,
+			rr.user_id,
+			rr.type,
+			rr.status,
+			rr.create_time,
+			rr.message
+		FROM parents AS p
+		JOIN parents_children AS pc ON (p.id = pc.parent_id)
+		JOIN children AS c ON (c.id = pc.child_id)
+		JOIN users AS us ON (us.id = c.user_id)
+		LEFT JOIN registration_requests AS rr ON (rr.user_id = us.id)
+		WHERE p.id = $1;`,
+		pid,
+	)
+	if err != nil {
+		return models.ChildWithRegReqList{}, err
+	}
+	defer rows.Close()
+
+	var respList models.ChildWithRegReqList
+	var resp models.ChildWithRegReq
+	var tempRegReq regReqWithNull
+	for rows.Next() {
+		err := rows.Scan(
+			&resp.Child.ID,
+			&resp.Child.UserID,
+			&resp.Child.Role,
+			&resp.Child.FirstName,
+			&resp.Child.SecondName,
+			&resp.Child.LastName,
+			&resp.Child.Phone,
+			&resp.Child.Email,
+			&resp.Child.EmailVerified,
+			&resp.Child.BirthDate,
+			&resp.Child.DoneStage,
+			&resp.Child.PlaceOfResidence,
+			&resp.Child.PlaceOfRegistration,
+			&tempRegReq.ID,
+			&tempRegReq.UserID,
+			&tempRegReq.Type,
+			&tempRegReq.Status,
+			&tempRegReq.CreateTime,
+			&tempRegReq.Message,
+		)
+		if err != nil {
+			return models.ChildWithRegReqList{}, err
+		}
+		resp.RegReq = tempRegReq.convertToRegReq()
+		respList = append(respList, resp)
+	}
+	if err := rows.Err(); err != nil {
+		return models.ChildWithRegReqList{}, err
+	}
+	return respList, nil
+}
+
+func (pr *postgresqlRepository) GetManagers(ctx context.Context) ([]models.User, error) {
+	rows, err := pr.conn.Query(
+		`SELECT id, role, first_name, second_name, last_name, phone, email, email_verified
+		FROM users
+		WHERE role = $1;`,
+		models.ManagerRole,
+	)
+	if err != nil {
+		return []models.User{}, err
+	}
+	defer rows.Close()
+
+	var respList []models.User
+	var user models.User
+	for rows.Next() {
+		err := rows.Scan(
+			&user.ID,
+			&user.Role,
+			&user.FirstName,
+			&user.SecondName,
+			&user.LastName,
+			&user.Phone,
+			&user.Email,
+			&user.EmailVerified,
+		)
+		if err != nil {
+			return []models.User{}, err
+		}
+		respList = append(respList, user)
+	}
+	if err := rows.Err(); err != nil {
+		return []models.User{}, err
+	}
+	return respList, nil
 }

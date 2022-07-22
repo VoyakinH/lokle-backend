@@ -52,6 +52,7 @@ type User struct {
 
 //easyjson:json
 type UserRes struct {
+	ID            uint64 `json:"id"`
 	Role          string `json:"role"`
 	FirstName     string `json:"first_name"`
 	SecondName    string `json:"second_name"`
@@ -60,6 +61,9 @@ type UserRes struct {
 	EmailVerified bool   `json:"email_verified"`
 	Phone         string `json:"phone"`
 }
+
+//easyjson:json
+type UserResList []UserRes
 
 //easyjson:json
 type Parent struct {
@@ -95,15 +99,24 @@ type Child struct {
 	LastName            string `json:"last_name"`
 	Email               string `json:"email"`
 	EmailVerified       bool   `json:"email_verified"`
-	Password            string `json:"password"`
+	Password            string `json:"password,omitempty"`
 	Phone               string `json:"phone"`
 	BirthDate           uint64 `json:"birth_date"`
 	DoneStage           Stage  `json:"done_stage"`
-	Passport            string `json:"passport"`
+	Passport            string `json:"passport,omitempty"`
 	PlaceOfResidence    string `json:"place_of_residence"`
 	PlaceOfRegistration string `json:"place_of_registration"`
-	DirPath             string `json:"dir_path"`
+	DirPath             string `json:"dir_path,omitempty"`
 }
+
+//easyjson:json
+type ChildWithRegReq struct {
+	Child  Child       `json:"child"`
+	RegReq *RegReqResp `json:"reg_req,omitempty"`
+}
+
+//easyjson:json
+type ChildWithRegReqList []ChildWithRegReq
 
 //easyjson:json
 type ChildFullRes struct {

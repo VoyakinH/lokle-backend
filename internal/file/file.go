@@ -67,6 +67,13 @@ func isEnabledExt(fileType string) bool {
 	return false
 }
 
+type userForUpload struct {
+	RoleID  uint64
+	Email   string
+	Role    models.Role
+	DirPath string
+}
+
 func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := ctx_utils.GetUser(ctx)
@@ -103,39 +110,81 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userIDString := r.FormValue("userID")
+	userID, err := strconv.ParseUint(userIDString, 10, 64)
+	if err != nil {
+		fm.logger.Errorf("%s can't to find user id in req [status=%d]", r.URL, http.StatusBadRequest)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	// data for user who files are uploaded
+	var uploadUser userForUpload
 	// find user dir path
-	var userDirPath string
-	var userRoleID uint64
 	switch user.Role {
 	case models.ParentRole:
-		parent, status, err := fm.userUseCase.GetParentByID(ctx, user.ID)
+		parent, status, err := fm.userUseCase.GetParentByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
-			fm.logger.Errorf("%s failed get parent user [status=%d] [error=%s]", r.URL, status, err)
+			fm.logger.Errorf("%s failed get parent user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 			ioutils.SendError(w, status, "internal")
 			return
 		}
-		userDirPath = parent.DirPath
-		userRoleID = parent.ID
+		if user.ID == userID {
+			uploadUser.DirPath = parent.DirPath
+			uploadUser.RoleID = parent.ID
+			uploadUser.Email = parent.Email
+			uploadUser.Role = parent.Role
+		} else {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, userID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			isParentChild, status, err := fm.userUseCase.CheckParentChild(ctx, parent.ID, child.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed check parent's children [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			if !isParentChild {
+				fm.logger.Errorf("%s user with userID %d there is not a parent's child [role=%s] [status=%d] [error=%s]", r.URL, userID, user.Role.String(), http.StatusForbidden, err)
+				ioutils.SendError(w, http.StatusForbidden, "bad request")
+				return
+			}
+			uploadUser.DirPath = child.DirPath
+			uploadUser.RoleID = child.ID
+			uploadUser.Email = child.Email
+			uploadUser.Role = child.Role
+		}
 	case models.ChildRole:
-		child, status, err := fm.userUseCase.GetChildByID(ctx, user.ID)
-		if err != nil || status != http.StatusOK {
-			fm.logger.Errorf("%s failed get child user [status=%d] [error=%s]", r.URL, status, err)
-			ioutils.SendError(w, status, "internal")
+		if user.ID == userID {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, user.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			uploadUser.DirPath = child.DirPath
+			uploadUser.RoleID = child.ID
+			uploadUser.Email = child.Email
+			uploadUser.Role = child.Role
+		} else {
+			fm.logger.Errorf("%s child try to load not own files [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusForbidden, err)
+			ioutils.SendError(w, http.StatusForbidden, "bad request")
 			return
 		}
-		userDirPath = child.DirPath
-		userRoleID = child.ID
 	default:
-		fm.logger.Errorf("%s unknown role while getting dir path %s [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
+		fm.logger.Errorf("%s unknown role while getting dir path [role=%s] [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 
 	// create user dir path if one not exists
-	if userDirPath == "" {
-		hashedPathName, err := hasher.HashAndSalt(user.Email)
+	if uploadUser.DirPath == "" {
+		hashedPathName, err := hasher.HashAndSalt(uploadUser.Email)
 		if err != nil {
-			fm.logger.Errorf("%s failed to create hash for user path with [status=%d] [error=%s]", r.URL, http.StatusInternalServerError, err)
+			fm.logger.Errorf("%s failed to create hash for user path with [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusInternalServerError, err)
 			ioutils.SendError(w, http.StatusInternalServerError, "internal")
 			return
 		}
@@ -144,39 +193,39 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		hashedPathName += "/"
 		err = os.MkdirAll(fm.rootPath+hashedPathName, os.ModePerm)
 		if err != nil {
-			fm.logger.Errorf("%s failed to create user's dir with [status=%d] [error=%s]", r.URL, http.StatusInternalServerError, err)
+			fm.logger.Errorf("%s failed to create user's dir with [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusInternalServerError, err)
 			ioutils.SendError(w, http.StatusInternalServerError, "internal")
 			return
 		}
-		switch user.Role {
+		switch uploadUser.Role {
 		case models.ParentRole:
-			createdDirPath, status, err := fm.userUseCase.CreateParentDirPath(ctx, userRoleID, hashedPathName)
+			createdDirPath, status, err := fm.userUseCase.CreateParentDirPath(ctx, uploadUser.RoleID, hashedPathName)
 			if err != nil || status != http.StatusOK {
-				fm.logger.Errorf("%s failed update parent dir path [status=%d] [error=%s]", r.URL, status, err)
+				fm.logger.Errorf("%s failed update parent dir path [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 				ioutils.SendError(w, status, "internal")
 				return
 			}
-			userDirPath = createdDirPath
+			uploadUser.DirPath = createdDirPath
 		case models.ChildRole:
-			createdDirPath, status, err := fm.userUseCase.CreateChildDirPath(ctx, userRoleID, hashedPathName)
+			createdDirPath, status, err := fm.userUseCase.CreateChildDirPath(ctx, uploadUser.RoleID, hashedPathName)
 			if err != nil || status != http.StatusOK {
-				fm.logger.Errorf("%s failed update child dir path [status=%d] [error=%s]", r.URL, status, err)
+				fm.logger.Errorf("%s failed update child dir path [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 				ioutils.SendError(w, status, "internal")
 				return
 			}
-			userDirPath = createdDirPath
+			uploadUser.DirPath = createdDirPath
 		default:
-			fm.logger.Errorf("%s unknown role while creating dir path %s [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
+			fm.logger.Errorf("%s unknown role while creating dir path [role=%s] [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
 			ioutils.SendError(w, http.StatusInternalServerError, "internal")
 			return
 		}
 	}
 
 	// create a new file in the uploads directory
-	fullFilePath := fmt.Sprintf(fm.rootPath + userDirPath + fileHeader.Filename)
+	fullFilePath := fmt.Sprintf(fm.rootPath + uploadUser.DirPath + fileHeader.Filename)
 	dst, err := os.Create(fullFilePath)
 	if err != nil {
-		fm.logger.Errorf("%s failed to create new file %s [status=%d] [error=%s]", r.URL, fullFilePath, http.StatusInternalServerError, err)
+		fm.logger.Errorf("%s failed to create new file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
@@ -186,10 +235,48 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 	// at the specified destination
 	_, err = io.Copy(dst, bytes.NewReader(buf))
 	if err != nil {
-		fm.logger.Errorf("%s failed to save user file %s [status=%d] [error=%s]", r.URL, fullFilePath, http.StatusInternalServerError, err)
+		fm.logger.Errorf("%s failed to save user file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
+}
+
+const (
+	applicationForAdmissionFileName = "application_for_admission"
+	applicationForAdmissionExt      = ".jpeg"
+	staticFilesFolder               = "$2a$04$pjXLPOhYaTaojItSmcCOc.1z6rzr9pXSWLrBtNLlljzfvTCZGyJA6/"
+)
+
+func (fm *FileManager) sendFile(w http.ResponseWriter, filePath string, handlerURL string) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		fm.logger.Errorf("%s failed to open user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+		ioutils.SendError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	defer file.Close()
+
+	fileHeader := make([]byte, 512)
+	_, err = file.Read(fileHeader)
+	if err != nil {
+		fm.logger.Errorf("%s failed to read user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+		ioutils.SendError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	fileType := http.DetectContentType(fileHeader)
+
+	fileInfo, _ := file.Stat()
+	fileSize := fileInfo.Size()
+
+	w.Header().Set("Expires", "0")
+	w.Header().Set("Content-Transfer-Encoding", "binary")
+	w.Header().Set("Content-Control", "private, no-transform, no-store, must-revalidate")
+	w.Header().Set("Content-Disposition", "attachment; filename="+filePath)
+	w.Header().Set("Content-Type", fileType)
+	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+
+	file.Seek(0, 0)
+	io.Copy(w, file)
 }
 
 func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
@@ -209,26 +296,88 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// static file
+	if req.FileName == applicationForAdmissionFileName {
+		filePath := fmt.Sprintf("%s/%s%s%s", fm.rootPath, staticFilesFolder, applicationForAdmissionFileName, applicationForAdmissionExt)
+		fm.sendFile(w, filePath, r.URL.String())
+		return
+	}
+
 	var userDirPath string
 	switch user.Role {
 	case models.ParentRole:
-		parent, status, err := fm.userUseCase.GetParentByID(ctx, req.UserID)
+		parent, status, err := fm.userUseCase.GetParentByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
-			fm.logger.Errorf("%s failed get parent user [status=%d] [error=%s]", r.URL, status, err)
+			fm.logger.Errorf("%s failed get parent user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 			ioutils.SendError(w, status, "internal")
 			return
 		}
-		userDirPath = parent.DirPath
+		if user.ID == req.UserID {
+			userDirPath = parent.DirPath
+		} else {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, req.UserID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			isParentChild, status, err := fm.userUseCase.CheckParentChild(ctx, parent.ID, child.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed check parent's children [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			if !isParentChild {
+				fm.logger.Errorf("%s user with userID %d there is not a parent's child [role=%s] [status=%d] [error=%s]", r.URL, req.UserID, user.Role.String(), http.StatusForbidden, err)
+				ioutils.SendError(w, http.StatusForbidden, "bad request")
+				return
+			}
+			userDirPath = child.DirPath
+		}
 	case models.ChildRole:
-		child, status, err := fm.userUseCase.GetChildByID(ctx, req.UserID)
+		if user.ID == req.UserID {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, user.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			userDirPath = child.DirPath
+		} else {
+			fm.logger.Errorf("%s child try to download not own files [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusForbidden, err)
+			ioutils.SendError(w, http.StatusForbidden, "bad request")
+			return
+		}
+	case models.ManagerRole:
+		ownerUser, status, err := fm.userUseCase.GetUserByID(ctx, req.UserID)
 		if err != nil || status != http.StatusOK {
-			fm.logger.Errorf("%s failed get child user [status=%d] [error=%s]", r.URL, status, err)
+			fm.logger.Errorf("%s failed get user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 			ioutils.SendError(w, status, "internal")
 			return
 		}
-		userDirPath = child.DirPath
+		if ownerUser.Role == models.ParentRole {
+			parent, status, err := fm.userUseCase.GetParentByUID(ctx, ownerUser.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get parent user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			userDirPath = parent.DirPath
+		} else if ownerUser.Role == models.ChildRole {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, ownerUser.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			userDirPath = child.DirPath
+		} else {
+			fm.logger.Errorf("%s manager try to download not parent or child file [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusForbidden, err)
+			ioutils.SendError(w, http.StatusForbidden, "bad request")
+			return
+		}
 	default:
-		fm.logger.Errorf("%s unknown role while getting dir path %s [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
+		fm.logger.Errorf("%s unknown role while getting dir path [role=%s] [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
@@ -249,39 +398,10 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		fm.logger.Errorf("%s failed finding file [status=%d]", r.URL, http.StatusInternalServerError)
+		fm.logger.Errorf("%s failed finding file %s [status=%d]", r.URL, req.FileName, http.StatusInternalServerError)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-
 	filePath := fmt.Sprintf("%s/%s%s", fm.rootPath, userDirPath, userFile)
-	file, err := os.Open(filePath)
-	if err != nil {
-		fm.logger.Errorf("%s failed to open user file %s with [status=%d] [error=%s]", r.URL, filePath, http.StatusInternalServerError, err)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	defer file.Close()
-
-	fileHeader := make([]byte, 512)
-	_, err = file.Read(fileHeader)
-	if err != nil {
-		fm.logger.Errorf("%s failed to read user file %s with [status=%d] [error=%s]", r.URL, filePath, http.StatusInternalServerError, err)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	fileType := http.DetectContentType(fileHeader)
-
-	fileInfo, _ := file.Stat()
-	fileSize := fileInfo.Size()
-
-	w.Header().Set("Expires", "0")
-	w.Header().Set("Content-Transfer-Encoding", "binary")
-	w.Header().Set("Content-Control", "private, no-transform, no-store, must-revalidate")
-	w.Header().Set("Content-Disposition", "attachment; filename="+filePath)
-	w.Header().Set("Content-Type", fileType)
-	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
-
-	file.Seek(0, 0)
-	io.Copy(w, file)
+	fm.sendFile(w, filePath, r.URL.String())
 }

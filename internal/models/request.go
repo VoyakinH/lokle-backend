@@ -3,7 +3,7 @@ package models
 type RegReqType int8
 
 const (
-	ParentPassportVerification RegReqType = iota
+	ParentPassportVerification RegReqType = iota + 1
 	ChildFirstStageForStudent
 	ChildFirstStage
 	ChildSecondStage
@@ -44,10 +44,15 @@ type ChildSecondRegReq struct {
 }
 
 //easyjson:json
+type ChildThirdRegReq struct {
+	Child Child `json:"child"`
+}
+
+//easyjson:json
 type RegReqFull struct {
 	ID         uint64     `json:"id"`
 	UserID     uint64     `json:"user_id"`
-	ManagerID  uint64     `json:"manager_id"`
+	ManagerID  uint64     `json:"manager_id,omitempty"`
 	Type       RegReqType `json:"type"`
 	Status     string     `json:"status"`
 	CreateTime uint64     `json:"create_time"`
@@ -58,6 +63,7 @@ type RegReqFull struct {
 type RegReqResp struct {
 	ID         uint64 `json:"id"`
 	UserID     uint64 `json:"user_id"`
+	ManagerID  uint64 `json:"manager_id,omitempty"`
 	Type       string `json:"type"`
 	Status     string `json:"status"`
 	CreateTime uint64 `json:"create_time"`

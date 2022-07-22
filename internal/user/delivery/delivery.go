@@ -37,11 +37,14 @@ func SetUserRouting(router *mux.Router,
 
 	userAPI.HandleFunc("/parent", userDelivery.SignupParent).Methods(http.MethodPost)
 	userAPI.Handle("/parent", auth.WithAuth(http.HandlerFunc(userDelivery.GetParent))).Methods(http.MethodGet)
+	userAPI.Handle("/parent/children", auth.WithAuth(roleMw.CheckParent(http.HandlerFunc(userDelivery.GetParentChildren)))).Methods(http.MethodGet)
 
 	userAPI.HandleFunc("/manager", userDelivery.SignupManager).Methods(http.MethodPost)
 
 	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
 	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
+
+	userAPI.Handle("/admin/managers", auth.WithAuth(roleMw.CheckAdmin(http.HandlerFunc(userDelivery.GetManagers)))).Methods(http.MethodGet)
 }
 
 const expCookieTime = 1382400
@@ -64,7 +67,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if !user.EmailVerified {
+	if !user.EmailVerified && user.Role == models.ParentRole {
 		ud.logger.Errorf("%s user email not verified [status=%d]", r.URL, http.StatusUnauthorized)
 		ioutils.SendError(w, http.StatusUnauthorized, "not verified email")
 		return
@@ -219,7 +222,7 @@ func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parent, status, err := ud.userUseCase.GetParentByID(ctx, user.ID)
+	parent, status, err := ud.userUseCase.GetParentByUID(ctx, user.ID)
 	// if parent for created user not found and email verified
 	// we try to create parent without email verification
 	if status == http.StatusNotFound {
@@ -259,4 +262,42 @@ func (ud *UserDelivery) SignupManager(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ioutils.Send(w, status, tools.UserToUserRes(createdManager))
+}
+
+func (ud *UserDelivery) GetParentChildren(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	respList, status, err := ud.userUseCase.GetParentChildren(ctx, parent.ID)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, respList)
+}
+
+func (ud *UserDelivery) GetManagers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetUser(ctx)
+	if parent == nil {
+		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	respList, status, err := ud.userUseCase.GetManagers(ctx)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, tools.UsersToUserResList(respList))
 }
