@@ -65,7 +65,7 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 	}
 
 	if !user.EmailVerified {
-		ud.logger.Errorf("%s user email not verified [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
+		ud.logger.Errorf("%s user email not verified [status=%d]", r.URL, http.StatusUnauthorized)
 		ioutils.SendError(w, http.StatusUnauthorized, "not verified email")
 		return
 	}

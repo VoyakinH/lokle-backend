@@ -21,6 +21,7 @@ type IRegReqUsecase interface {
 	GetRegRequestsList(context.Context, uint64) ([]models.RegReqFull, int, error)
 	CreateChild(context.Context, models.ChildFirstRegReq, uint64) (models.Child, int, error)
 	CompleteRegReq(context.Context, uint64) (int, error)
+	SecondRegistrationChildStage(context.Context, models.ChildSecondRegReq, models.Parent) (models.RegReqFull, int, error)
 }
 
 type regReqUsecase struct {
@@ -125,14 +126,39 @@ func (rru *regReqUsecase) CreateChild(ctx context.Context, childReq models.Child
 	}, http.StatusOK, nil
 }
 
-// func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, childReq models.ChildSecondRegReq, pid uint64) (models.Child, int, error) {
-// 	// child, err := rru.userPsql.GetChildByID(ctx, childReq.Child.ID)
-// 	// update child data: passport, places
-// 	// rru.userPsql.UpdateChild(ctx, )
-// 	// update retationships
+func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, childReq models.ChildSecondRegReq, parent models.Parent) (models.RegReqFull, int, error) {
+	child, err := rru.userPsql.GetChildByID(ctx, childReq.Child.ID)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child data with err: %s", err)
+	}
 
-// 	// create second type req
-// }
+	respList, err := rru.psql.GetRegRequestList(ctx, child.UserID)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child's requests: %s", err)
+	}
+	for _, existsReq := range respList {
+		if existsReq.Type == models.ChildSecondStage && existsReq.Status == "pending" {
+			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: child has already created this request")
+		}
+	}
+
+	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to update child data with err: %s", err)
+	}
+
+	err = rru.userPsql.UpdateParentChildRelationship(ctx, parent.ID, child.ID, childReq.Relationship)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to update parent and child relationship with err: %s", err)
+	}
+
+	req, err := rru.psql.CreateRegReq(ctx, child.UserID, models.ChildSecondStage)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to create verification request with err: %s", err)
+	}
+
+	return req, http.StatusOK, nil
+}
 
 func (rru *regReqUsecase) completeThirdRegistrationChildStage(ctx context.Context, uid uint64) error {
 	err := rru.userPsql.VerifyStageForChild(ctx, uid, models.ThirdStage)

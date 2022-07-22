@@ -32,7 +32,7 @@ func (r Role) String() string {
 type Stage int8
 
 const (
-	FirstStage Stage = iota
+	FirstStage Stage = iota + 1
 	SecondStage
 	ThirdStage
 )

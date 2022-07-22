@@ -142,14 +142,14 @@ func (rrd *RegReqDelivery) SecondSignupChild(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// createdChild, status, err := rrd.regReqUseCase.SecondRegistrationChildStage(ctx, childReq, parent.ID)
-	// if err != nil || status != http.StatusOK {
-	// 	rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-	// 	ioutils.SendError(w, status, "internal")
-	// 	return
-	// }
+	createdReq, status, err := rrd.regReqUseCase.SecondRegistrationChildStage(ctx, childReq, *parent)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
 
-	// ioutils.Send(w, status, tools.ChildToChildFullRes(createdChild))
+	ioutils.Send(w, status, tools.FullRegReqToSimpleResp(createdReq))
 }
 
 func (rrd *RegReqDelivery) CompleteRegReq(w http.ResponseWriter, r *http.Request) {

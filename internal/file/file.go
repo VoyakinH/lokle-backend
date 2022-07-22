@@ -232,11 +232,9 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	fm.logger.Info(userDirPath)
 
 	var userFile string
 	err = filepath.Walk(fm.rootPath+userDirPath, func(path string, info os.FileInfo, err error) error {
-		fm.logger.Info(path)
 		if err != nil {
 			fm.logger.Errorf("%s file walk failed with [status=%d] [error=%s]", r.URL, http.StatusInternalServerError, err)
 			return nil

@@ -66,6 +66,17 @@ func ChildToUser(child models.Child) models.User {
 	}
 }
 
+func FullRegReqToSimpleResp(req models.RegReqFull) models.RegReqResp {
+	return models.RegReqResp{
+		ID:         req.ID,
+		UserID:     req.UserID,
+		Type:       req.Type.String(),
+		Status:     req.Status,
+		CreateTime: req.CreateTime,
+		Message:    req.Message,
+	}
+}
+
 func FullRegReqToSimpleRespList(reqs []models.RegReqFull) models.RegReqRespList {
 	var respList models.RegReqRespList
 	for _, req := range reqs {

@@ -15,6 +15,7 @@ type IPostgresqlRepository interface {
 	GetUserByEmail(context.Context, string) (models.User, error)
 	GetUserByID(context.Context, uint64) (models.User, error)
 	GetParentByID(context.Context, uint64) (models.Parent, error)
+	GetChildByUID(context.Context, uint64) (models.Child, error)
 	GetChildByID(context.Context, uint64) (models.Child, error)
 	CreateUser(context.Context, models.User) (models.User, error)
 	DeleteUser(context.Context, uint64) (models.User, error)
@@ -27,7 +28,8 @@ type IPostgresqlRepository interface {
 	VerifyParentPassport(context.Context, uint64) error
 	VerifyStageForChild(context.Context, uint64, models.Stage) error
 	UpdateUserPswd(context.Context, uint64, string) error
-	UpdateChild(context.Context, models.Child) (models.Child, error)
+	UpdateChild(context.Context, models.Child) error
+	UpdateParentChildRelationship(context.Context, uint64, uint64, string) error
 }
 
 type postgresqlRepository struct {
@@ -279,7 +281,7 @@ func (pr *postgresqlRepository) GetParentByID(ctx context.Context, uid uint64) (
 	return parent, nil
 }
 
-func (pr *postgresqlRepository) GetChildByID(ctx context.Context, uid uint64) (models.Child, error) {
+func (pr *postgresqlRepository) GetChildByUID(ctx context.Context, uid uint64) (models.Child, error) {
 	var child models.Child
 	err := pr.conn.QueryRow(
 		`SELECT
@@ -304,6 +306,55 @@ func (pr *postgresqlRepository) GetChildByID(ctx context.Context, uid uint64) (m
 		ON (c.user_id = us.id)
 		WHERE us.id = $1;`,
 		uid,
+	).Scan(
+		&child.ID,
+		&child.UserID,
+		&child.Role,
+		&child.FirstName,
+		&child.SecondName,
+		&child.LastName,
+		&child.Phone,
+		&child.Email,
+		&child.EmailVerified,
+		&child.Password,
+		&child.BirthDate,
+		&child.DoneStage,
+		&child.Passport,
+		&child.PlaceOfResidence,
+		&child.PlaceOfRegistration,
+		&child.DirPath,
+	)
+	if err != nil {
+		return models.Child{}, err
+	}
+	return child, nil
+}
+
+func (pr *postgresqlRepository) GetChildByID(ctx context.Context, cid uint64) (models.Child, error) {
+	var child models.Child
+	err := pr.conn.QueryRow(
+		`SELECT
+			c.id,
+			c.user_id,
+			us.role,
+			us.first_name,
+			us.second_name,
+			us.last_name,
+			us.phone,
+			us.email,
+			us.email_verified,
+			us.password,
+			c.birth_date,
+			c.done_stage,
+			c.passport,
+			c.place_of_residence,
+			c.place_of_registration,
+			c.dir_path
+		FROM users as us
+		JOIN children as c
+		ON (c.user_id = us.id)
+		WHERE c.id = $1;`,
+		cid,
 	).Scan(
 		&child.ID,
 		&child.UserID,
@@ -441,20 +492,43 @@ func (pr *postgresqlRepository) UpdateUserPswd(ctx context.Context, uid uint64, 
 	return nil
 }
 
-func (pr *postgresqlRepository) UpdateChild(ctx context.Context, child models.Child) (models.Child, error) {
-	var updatedChild models.Child
+func (pr *postgresqlRepository) UpdateChild(ctx context.Context, child models.Child) error {
+	var cid uint64
 	err := pr.conn.QueryRow(
 		`UPDATE children
-		SET () = ()
+		SET (passport, place_of_residence, place_of_registration) = ($2, $3, $4)
 		WHERE id = $1
 		RETURNING id;`,
 		child.ID,
+		child.Passport,
+		child.PlaceOfResidence,
+		child.PlaceOfRegistration,
 	).Scan(
-		&updatedChild,
+		&cid,
 	)
 
 	if err != nil {
-		return models.Child{}, err
+		return err
 	}
-	return updatedChild, nil
+	return nil
+}
+
+func (pr *postgresqlRepository) UpdateParentChildRelationship(ctx context.Context, pid uint64, cid uint64, relationship string) error {
+	var id uint64
+	err := pr.conn.QueryRow(
+		`UPDATE parents_children
+		SET relationship = $3
+		WHERE parent_id = $1 AND child_id = $2
+		RETURNING id;`,
+		pid,
+		cid,
+		relationship,
+	).Scan(
+		&id,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
 }

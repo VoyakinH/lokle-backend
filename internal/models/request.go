@@ -39,8 +39,8 @@ type ChildFirstRegReq struct {
 
 //easyjson:json
 type ChildSecondRegReq struct {
-	Child        Child `json:"child"`
-	Relationship bool  `json:"relationship"`
+	Child        Child  `json:"child"`
+	Relationship string `json:"relationship"`
 }
 
 //easyjson:json

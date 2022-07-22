@@ -380,7 +380,7 @@ func easyjson3c9d2b01DecodeGithubComVoyakinHLokleBackendInternalModels4(in *jlex
 		case "child":
 			(out.Child).UnmarshalEasyJSON(in)
 		case "relationship":
-			out.Relationship = bool(in.Bool())
+			out.Relationship = string(in.String())
 		default:
 			in.SkipRecursive()
 		}
@@ -403,7 +403,7 @@ func easyjson3c9d2b01EncodeGithubComVoyakinHLokleBackendInternalModels4(out *jwr
 	{
 		const prefix string = ",\"relationship\":"
 		out.RawString(prefix)
-		out.Bool(bool(in.Relationship))
+		out.String(string(in.Relationship))
 	}
 	out.RawByte('}')
 }
