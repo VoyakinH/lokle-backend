@@ -64,9 +64,9 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// if email not verified we send user but doesn't create and set cookie
 	if !user.EmailVerified {
-		ioutils.Send(w, status, user)
+		ud.logger.Errorf("%s user email not verified [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
+		ioutils.SendError(w, http.StatusUnauthorized, "not verified email")
 		return
 	}
 

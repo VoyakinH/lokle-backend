@@ -670,6 +670,8 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels6(in *jlex
 			continue
 		}
 		switch key {
+		case "id":
+			out.ID = uint64(in.Uint64())
 		case "role":
 			out.Role = string(in.String())
 		case "first_name":
@@ -711,8 +713,13 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels6(out *jwr
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"role\":"
+		const prefix string = ",\"id\":"
 		out.RawString(prefix[1:])
+		out.Uint64(uint64(in.ID))
+	}
+	{
+		const prefix string = ",\"role\":"
+		out.RawString(prefix)
 		out.String(string(in.Role))
 	}
 	{

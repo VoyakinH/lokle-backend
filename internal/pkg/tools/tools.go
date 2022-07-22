@@ -24,6 +24,7 @@ func ParentToParentRes(parent models.Parent) models.ParentRes {
 
 func ChildToChildFullRes(child models.Child) models.ChildFullRes {
 	return models.ChildFullRes{
+		ID:                  child.ID,
 		Role:                child.Role.String(),
 		FirstName:           child.FirstName,
 		SecondName:          child.SecondName,

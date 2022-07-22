@@ -126,7 +126,7 @@ func (rru *regReqUsecase) CreateChild(ctx context.Context, childReq models.Child
 }
 
 // func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, childReq models.ChildSecondRegReq, pid uint64) (models.Child, int, error) {
-// 	// rru.userPsql.GetChildByID()
+// 	// child, err := rru.userPsql.GetChildByID(ctx, childReq.Child.ID)
 // 	// update child data: passport, places
 // 	// rru.userPsql.UpdateChild(ctx, )
 // 	// update retationships

@@ -107,6 +107,7 @@ type Child struct {
 
 //easyjson:json
 type ChildFullRes struct {
+	ID                  uint64 `json:"id"`
 	Role                string `json:"role"`
 	FirstName           string `json:"first_name"`
 	SecondName          string `json:"second_name"`
