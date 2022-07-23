@@ -36,21 +36,27 @@ func SetRegReqRouting(router *mux.Router,
 
 	regReqParentAPI.HandleFunc("/passport", regReqDelivery.CreateVerifyParentPassportReq).Methods(http.MethodPost)
 	regReqParentAPI.HandleFunc("/list", regReqDelivery.GetParentRegRequests).Methods(http.MethodGet)
+	regReqParentAPI.HandleFunc("/passport/fix", regReqDelivery.FixVerifyParentPassportReq).Methods(http.MethodPost)
 
 	regReqChildAPI := router.PathPrefix("/api/v1/reg/request/child/stage").Subrouter()
 	regReqChildAPI.Use(middleware.WithJSON)
 	regReqChildAPI.Use(auth.WithAuth)
 
 	regReqChildAPI.Handle("/first", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FirstSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/first/fix", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FixFirstSignupChild))).Methods(http.MethodPost)
 	regReqChildAPI.Handle("/second", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.SecondSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/second/fix", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FixSecondSignupChild))).Methods(http.MethodPost)
 	regReqChildAPI.Handle("/third", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.ThirdSignupChild))).Methods(http.MethodPost)
+	regReqChildAPI.Handle("/third/fix", roleMw.CheckParent(http.HandlerFunc(regReqDelivery.FixThirdSignupChild))).Methods(http.MethodPost)
 
-	regReqCompleteAPI := router.PathPrefix("/api/v1/reg/request").Subrouter()
+	regReqCompleteAPI := router.PathPrefix("/api/v1/reg/request/manager").Subrouter()
 	regReqCompleteAPI.Use(middleware.WithJSON)
 	regReqCompleteAPI.Use(auth.WithAuth)
 	regReqCompleteAPI.Use(roleMw.CheckManager)
 
 	regReqCompleteAPI.HandleFunc("/complete", regReqDelivery.CompleteRegReq).Methods(http.MethodGet)
+	regReqCompleteAPI.HandleFunc("/failed", regReqDelivery.FailedRegReq).Methods(http.MethodPost)
+	regReqCompleteAPI.HandleFunc("/list", regReqDelivery.GetRegReqs).Methods(http.MethodGet)
 }
 
 func (rrd *RegReqDelivery) CreateVerifyParentPassportReq(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +77,33 @@ func (rrd *RegReqDelivery) CreateVerifyParentPassportReq(w http.ResponseWriter, 
 	}
 
 	status, err := rrd.regReqUseCase.CreateVerifyParentPassportReq(ctx, *parent, req)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
+func (rrd *RegReqDelivery) FixVerifyParentPassportReq(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		rrd.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var req models.FixParentPassportReq
+	err := ioutils.ReadJSON(r, &req)
+	if err != nil || req.Passport == "" {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := rrd.regReqUseCase.FixVerifyParentPassportReq(ctx, *parent, req)
 	if err != nil || status != http.StatusOK {
 		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -126,6 +159,33 @@ func (rrd *RegReqDelivery) FirstSignupChild(w http.ResponseWriter, r *http.Reque
 	ioutils.Send(w, status, tools.ChildToChildFullRes(createdChild))
 }
 
+func (rrd *RegReqDelivery) FixFirstSignupChild(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		rrd.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var childReq models.FixChildFirstRegReq
+	err := ioutils.ReadJSON(r, &childReq)
+	if err != nil || !parent.PassportVerified && !childReq.IsStudent {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := rrd.regReqUseCase.FixChild(ctx, childReq)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
 func (rrd *RegReqDelivery) SecondSignupChild(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	parent := ctx_utils.GetParent(ctx)
@@ -153,6 +213,33 @@ func (rrd *RegReqDelivery) SecondSignupChild(w http.ResponseWriter, r *http.Requ
 	ioutils.Send(w, status, tools.FullRegReqToSimpleResp(createdReq))
 }
 
+func (rrd *RegReqDelivery) FixSecondSignupChild(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		rrd.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var childReq models.FixChildSecondRegReq
+	err := ioutils.ReadJSON(r, &childReq)
+	if err != nil {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := rrd.regReqUseCase.FixSecondRegistrationChildStage(ctx, childReq, *parent)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
 func (rrd *RegReqDelivery) ThirdSignupChild(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	parent := ctx_utils.GetParent(ctx)
@@ -170,7 +257,7 @@ func (rrd *RegReqDelivery) ThirdSignupChild(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	createdReq, status, err := rrd.regReqUseCase.ThirdRegistrationChildStage(ctx, childReq, *parent)
+	createdReq, status, err := rrd.regReqUseCase.ThirdRegistrationChildStage(ctx, childReq)
 	if err != nil || status != http.StatusOK {
 		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")
@@ -178,6 +265,33 @@ func (rrd *RegReqDelivery) ThirdSignupChild(w http.ResponseWriter, r *http.Reque
 	}
 
 	ioutils.Send(w, status, tools.FullRegReqToSimpleResp(createdReq))
+}
+
+func (rrd *RegReqDelivery) FixThirdSignupChild(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	parent := ctx_utils.GetParent(ctx)
+	if parent == nil {
+		rrd.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var childReq models.FixChildThirdRegReq
+	err := ioutils.ReadJSON(r, &childReq)
+	if err != nil {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := rrd.regReqUseCase.FixThirdRegistrationChildStage(ctx, childReq)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
 }
 
 func (rrd *RegReqDelivery) CompleteRegReq(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +310,52 @@ func (rrd *RegReqDelivery) CompleteRegReq(w http.ResponseWriter, r *http.Request
 	}
 
 	status, err := rrd.regReqUseCase.CompleteRegReq(ctx, reqID)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.SendWithoutBody(w, status)
+}
+
+func (rrd *RegReqDelivery) GetRegReqs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	manager := ctx_utils.GetUser(ctx)
+	if manager == nil {
+		rrd.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	reqList, status, err := rrd.regReqUseCase.GetRegRequestsListAll(ctx)
+	if err != nil || status != http.StatusOK {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, tools.RegReqsWithUserToRespList(reqList))
+}
+
+func (rrd *RegReqDelivery) FailedRegReq(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	manager := ctx_utils.GetUser(ctx)
+	if manager == nil {
+		rrd.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var failedReq models.FailedReq
+	err := ioutils.ReadJSON(r, &failedReq)
+	if err != nil {
+		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	status, err := rrd.regReqUseCase.FailedRegReq(ctx, manager.ID, failedReq)
 	if err != nil || status != http.StatusOK {
 		rrd.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
 		ioutils.SendError(w, status, "internal")

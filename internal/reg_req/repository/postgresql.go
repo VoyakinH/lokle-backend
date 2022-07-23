@@ -14,9 +14,12 @@ import (
 
 type IPostgresqlRepository interface {
 	CreateRegReq(context.Context, uint64, models.RegReqType) (models.RegReqFull, error)
+	FixRegReq(context.Context, uint64) error
 	GetRegRequestList(context.Context, uint64) ([]models.RegReqFull, error)
+	GetRegRequestListAll(context.Context) ([]models.RegReqWithUser, error)
 	GetRegRequestByID(context.Context, uint64) (models.RegReqFull, error)
 	DeleteRegReq(context.Context, uint64) (models.RegReqFull, error)
+	FailedRegReq(context.Context, uint64, models.FailedReq) error
 }
 
 type postgresqlRepository struct {
@@ -105,6 +108,109 @@ func (pr *postgresqlRepository) GetRegRequestList(ctx context.Context, uid uint6
 	return respList, nil
 }
 
+type managerNull struct {
+	ID         *uint64
+	FirstName  *string
+	SecondName *string
+	LastName   *string
+	Role       *models.Role
+}
+
+func (mn *managerNull) convertToManager() *models.User {
+	result := &models.User{}
+	isEmpty := true
+	if mn.ID != nil {
+		result.ID = *mn.ID
+		isEmpty = false
+	}
+	if mn.FirstName != nil {
+		result.FirstName = *mn.FirstName
+		isEmpty = false
+	}
+	if mn.SecondName != nil {
+		result.SecondName = *mn.SecondName
+		isEmpty = false
+	}
+	if mn.LastName != nil {
+		result.LastName = *mn.LastName
+		isEmpty = false
+	}
+	if mn.Role != nil {
+		result.Role = *mn.Role
+		isEmpty = false
+	}
+	if isEmpty {
+		return nil
+	}
+	return result
+}
+
+func (pr *postgresqlRepository) GetRegRequestListAll(ctx context.Context) ([]models.RegReqWithUser, error) {
+	rows, err := pr.conn.Query(
+		`SELECT
+			rr.id,
+			us.id,
+			us.first_name,
+			us.second_name,
+			us.last_name,
+			us.role,
+			us.email,
+			us.phone,
+			usm.id,
+			usm.first_name,
+			usm.second_name,
+			usm.last_name,
+			usm.role,
+			rr.type,
+			rr.status,
+			rr.create_time,
+			rr.message
+		FROM registration_requests AS rr
+		JOIN users AS us ON (us.id = rr.user_id)
+		LEFT JOIN users AS usm ON (usm.id = rr.manager_id)
+		WHERE rr.status = 'pending'
+		ORDER BY create_time;`,
+	)
+	if err != nil {
+		return []models.RegReqWithUser{}, err
+	}
+	defer rows.Close()
+
+	var respList []models.RegReqWithUser
+	var resp models.RegReqWithUser
+	var tempManager managerNull
+	for rows.Next() {
+		err := rows.Scan(
+			&resp.ID,
+			&resp.User.ID,
+			&resp.User.FirstName,
+			&resp.User.SecondName,
+			&resp.User.LastName,
+			&resp.User.Role,
+			&resp.User.Email,
+			&resp.User.Phone,
+			&tempManager.ID,
+			&tempManager.FirstName,
+			&tempManager.SecondName,
+			&tempManager.LastName,
+			&tempManager.Role,
+			&resp.Type,
+			&resp.Status,
+			&resp.CreateTime,
+			&resp.Message,
+		)
+		if err != nil {
+			return []models.RegReqWithUser{}, err
+		}
+		resp.Manager = tempManager.convertToManager()
+		respList = append(respList, resp)
+	}
+	if err := rows.Err(); err != nil {
+		return []models.RegReqWithUser{}, err
+	}
+	return respList, nil
+}
+
 func (pr *postgresqlRepository) GetRegRequestByID(ctx context.Context, reqID uint64) (models.RegReqFull, error) {
 	var req models.RegReqFull
 	err := pr.conn.QueryRow(
@@ -149,4 +255,44 @@ func (pr *postgresqlRepository) DeleteRegReq(ctx context.Context, reqID uint64) 
 		}
 	}
 	return deletedReq, nil
+}
+
+func (pr *postgresqlRepository) FailedRegReq(ctx context.Context, managerID uint64, failedReq models.FailedReq) error {
+	var updateReqID uint64
+	err := pr.conn.QueryRow(
+		`UPDATE registration_requests
+		SET (manager_id, status, message) = ($2, 'failed', $3)
+		WHERE id = $1
+		RETURNING id;`,
+		failedReq.ReqId,
+		managerID,
+		failedReq.FailedMessage,
+	).Scan(
+		&updateReqID,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *postgresqlRepository) FixRegReq(ctx context.Context, reqID uint64) error {
+	var updatedPassport uint64
+	now := time.Now().Unix()
+	err := pr.conn.QueryRow(
+		`UPDATE registration_requests
+		SET (status, create_time) = ('pending', $2)
+		WHERE id = $1
+		RETURNING id;`,
+		reqID,
+		now,
+	).Scan(
+		&updatedPassport,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -28,6 +28,8 @@ type IPostgresqlRepository interface {
 	VerifyParentPassport(context.Context, uint64) error
 	VerifyStageForChild(context.Context, uint64, models.Stage) error
 	UpdateUserPswd(context.Context, uint64, string) error
+	UpdateUserWithoutEmail(context.Context, models.User) error
+	UpdateUserWithEmail(context.Context, models.User) error
 	UpdateChild(context.Context, models.Child) error
 	UpdateParentChildRelationship(context.Context, uint64, uint64, string) error
 	CheckParentChildren(context.Context, uint64, uint64) (bool, error)
@@ -495,14 +497,60 @@ func (pr *postgresqlRepository) UpdateUserPswd(ctx context.Context, uid uint64, 
 	return nil
 }
 
+func (pr *postgresqlRepository) UpdateUserWithoutEmail(ctx context.Context, user models.User) error {
+	var updatedUid uint64
+	err := pr.conn.QueryRow(
+		`UPDATE users
+		SET (first_name, second_name, last_name, phone) = ($2, $3, $4, $5)
+		WHERE id = $1
+		RETURNING id;`,
+		user.ID,
+		user.FirstName,
+		user.SecondName,
+		user.LastName,
+		user.Phone,
+	).Scan(
+		&updatedUid,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *postgresqlRepository) UpdateUserWithEmail(ctx context.Context, user models.User) error {
+	var updatedUid uint64
+	err := pr.conn.QueryRow(
+		`UPDATE users
+		SET (first_name, second_name, last_name, phone, email) = ($2, $3, $4, $5, $6)
+		WHERE id = $1
+		RETURNING id;`,
+		user.ID,
+		user.FirstName,
+		user.SecondName,
+		user.LastName,
+		user.Phone,
+		user.Email,
+	).Scan(
+		&updatedUid,
+	)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (pr *postgresqlRepository) UpdateChild(ctx context.Context, child models.Child) error {
 	var cid uint64
 	err := pr.conn.QueryRow(
 		`UPDATE children
-		SET (passport, place_of_residence, place_of_registration) = ($2, $3, $4)
+		SET (birth_date, passport, place_of_residence, place_of_registration) = ($2, $3, $4, $5)
 		WHERE user_id = $1
 		RETURNING id;`,
 		child.UserID,
+		child.BirthDate,
 		child.Passport,
 		child.PlaceOfResidence,
 		child.PlaceOfRegistration,

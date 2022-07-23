@@ -32,9 +32,22 @@ type ParentPassportReq struct {
 }
 
 //easyjson:json
+type FixParentPassportReq struct {
+	ReqID    uint64 `json:"req_id"`
+	Passport string `json:"passport"`
+}
+
+//easyjson:json
 type ChildFirstRegReq struct {
 	Child     Child `json:"child"`
 	IsStudent bool  `json:"is_student"`
+}
+
+//easyjson:json
+type FixChildFirstRegReq struct {
+	ReqID     uint64 `json:"req_id"`
+	Child     Child  `json:"child"`
+	IsStudent bool   `json:"is_student"`
 }
 
 //easyjson:json
@@ -44,8 +57,21 @@ type ChildSecondRegReq struct {
 }
 
 //easyjson:json
+type FixChildSecondRegReq struct {
+	ReqID        uint64 `json:"req_id"`
+	Child        Child  `json:"child"`
+	Relationship string `json:"relationship"`
+}
+
+//easyjson:json
 type ChildThirdRegReq struct {
 	Child Child `json:"child"`
+}
+
+//easyjson:json
+type FixChildThirdRegReq struct {
+	ReqID uint64 `json:"req_id"`
+	Child Child  `json:"child"`
 }
 
 //easyjson:json
@@ -72,3 +98,36 @@ type RegReqResp struct {
 
 //easyjson:json
 type RegReqRespList []RegReqResp
+
+//easyjson:json
+type RegReqWithUser struct {
+	ID          uint64     `json:"id"`
+	User        User       `json:"user"`
+	Manager     *User      `json:"manager,omitempty"`
+	Type        RegReqType `json:"type"`
+	Status      string     `json:"status"`
+	TimeInQueue uint32     `json:"time_in_queue"`
+	CreateTime  uint64     `json:"create_time"`
+	Message     string     `json:"message"`
+}
+
+//easyjson:json
+type RegReqWithUserResp struct {
+	ID          uint64   `json:"id"`
+	User        UserRes  `json:"user"`
+	Manager     *UserRes `json:"manager,omitempty"`
+	Type        string   `json:"type"`
+	Status      string   `json:"status"`
+	TimeInQueue uint32   `json:"time_in_queue"`
+	CreateTime  uint64   `json:"create_time"`
+	Message     string   `json:"message"`
+}
+
+//easyjson:json
+type RegReqWithUserRespList []RegReqWithUserResp
+
+//easyjson:json
+type FailedReq struct {
+	ReqId         uint64 `json:"req_id"`
+	FailedMessage string `json:"failed_message"`
+}

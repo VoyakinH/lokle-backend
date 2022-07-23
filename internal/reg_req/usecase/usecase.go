@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/VoyakinH/lokle_backend/internal/models"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/hasher"
@@ -16,13 +17,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	PendingReqStatus = "pending"
+	FailedReqStatus  = "failed"
+)
+
 type IRegReqUsecase interface {
 	CreateVerifyParentPassportReq(context.Context, models.Parent, models.ParentPassportReq) (int, error)
 	GetRegRequestsList(context.Context, uint64) ([]models.RegReqFull, int, error)
+	GetRegRequestsListAll(context.Context) ([]models.RegReqWithUser, int, error)
 	CreateChild(context.Context, models.ChildFirstRegReq, uint64) (models.Child, int, error)
 	CompleteRegReq(context.Context, uint64) (int, error)
 	SecondRegistrationChildStage(context.Context, models.ChildSecondRegReq, models.Parent) (models.RegReqFull, int, error)
-	ThirdRegistrationChildStage(context.Context, models.ChildThirdRegReq, models.Parent) (models.RegReqFull, int, error)
+	ThirdRegistrationChildStage(context.Context, models.ChildThirdRegReq) (models.RegReqFull, int, error)
+	FailedRegReq(context.Context, uint64, models.FailedReq) (int, error)
+	FixVerifyParentPassportReq(context.Context, models.Parent, models.FixParentPassportReq) (int, error)
+	FixChild(context.Context, models.FixChildFirstRegReq) (int, error)
+	FixSecondRegistrationChildStage(context.Context, models.FixChildSecondRegReq, models.Parent) (int, error)
+	FixThirdRegistrationChildStage(context.Context, models.FixChildThirdRegReq) (int, error)
 }
 
 type regReqUsecase struct {
@@ -49,7 +61,7 @@ func (rru *regReqUsecase) CreateVerifyParentPassportReq(ctx context.Context, par
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CreateVerifyParentPassportReq: failed to get parent's requests: %s", err)
 	}
 	for _, existsReq := range respList {
-		if existsReq.Type == models.ParentPassportVerification && existsReq.Status == "pending" {
+		if existsReq.Type == models.ParentPassportVerification && existsReq.Status == PendingReqStatus {
 			return http.StatusConflict, fmt.Errorf("RegReqUsecase.CreateVerifyParentPassportReq: parent has already created this request")
 		}
 	}
@@ -73,10 +85,53 @@ func (rru *regReqUsecase) CreateVerifyParentPassportReq(ctx context.Context, par
 	return http.StatusOK, nil
 }
 
+func (rru *regReqUsecase) FixVerifyParentPassportReq(ctx context.Context, parent models.Parent, reqFix models.FixParentPassportReq) (int, error) {
+	if parent.PassportVerified {
+		return http.StatusOK, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: parent passport has been already verified")
+	}
+
+	_, err := rru.psql.GetRegRequestByID(ctx, reqFix.ReqID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to get request with err: %s", err)
+	}
+
+	hashedPassport, err := hasher.HashAndSalt(reqFix.Passport)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to hash passport with err: %s", err)
+	}
+	reqFix.Passport = hashedPassport
+
+	_, err = rru.userPsql.UpdateParentPassport(ctx, parent.ID, reqFix.Passport)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to update parent passport with err: %s", err)
+	}
+
+	err = rru.psql.FixRegReq(ctx, reqFix.ReqID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to fix verification request with err: %s", err)
+	}
+
+	return http.StatusOK, nil
+}
+
 func (rru *regReqUsecase) GetRegRequestsList(ctx context.Context, uid uint64) ([]models.RegReqFull, int, error) {
 	respList, err := rru.psql.GetRegRequestList(ctx, uid)
 	if err != nil {
 		return []models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.GetParentRegRequests: failed to get parent requests with err: %s", err)
+	}
+	return respList, http.StatusOK, nil
+}
+
+func (rru *regReqUsecase) GetRegRequestsListAll(ctx context.Context) ([]models.RegReqWithUser, int, error) {
+	respList, err := rru.psql.GetRegRequestListAll(ctx)
+	if err != nil {
+		return []models.RegReqWithUser{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.GetRegRequestsListAll: failed to get parent requests with err: %s", err)
+	}
+	now := uint64(time.Now().Unix())
+	for i := range respList {
+		respList[i].TimeInQueue = uint32((now - respList[i].CreateTime) / 86400)
 	}
 	return respList, http.StatusOK, nil
 }
@@ -127,6 +182,65 @@ func (rru *regReqUsecase) CreateChild(ctx context.Context, childReq models.Child
 	}, http.StatusOK, nil
 }
 
+func (rru *regReqUsecase) FixChild(ctx context.Context, childReq models.FixChildFirstRegReq) (int, error) {
+	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
+	}
+	if req.Status == PendingReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
+	}
+
+	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixChild: child not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixChild: failed to update child with err: %s", err)
+	}
+
+	childUser, err := rru.userPsql.GetUserByID(ctx, childReq.Child.UserID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixChild: user not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixChild: failed to get user with err: %s", err)
+	}
+	if childUser.Email != childReq.Child.Email {
+		err = rru.userPsql.UpdateUserWithEmail(ctx, models.User{
+			ID:         childReq.Child.UserID,
+			FirstName:  childReq.Child.FirstName,
+			SecondName: childReq.Child.SecondName,
+			LastName:   childReq.Child.LastName,
+			Phone:      childReq.Child.Phone,
+			Email:      childReq.Child.Email,
+		})
+	} else {
+		err = rru.userPsql.UpdateUserWithoutEmail(ctx, models.User{
+			ID:         childReq.Child.UserID,
+			FirstName:  childReq.Child.FirstName,
+			SecondName: childReq.Child.SecondName,
+			LastName:   childReq.Child.LastName,
+			Phone:      childReq.Child.Phone,
+		})
+	}
+
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixChild: user not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixChild: failed to update user with err: %s", err)
+	}
+
+	err = rru.psql.FixRegReq(ctx, childReq.ReqID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixChild: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixChild: failed to fix request with err: %s", err)
+	}
+
+	return http.StatusOK, nil
+}
+
 func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, childReq models.ChildSecondRegReq, parent models.Parent) (models.RegReqFull, int, error) {
 	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
 	if err != nil {
@@ -138,10 +252,14 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child's requests: %s", err)
 	}
 	for _, existsReq := range respList {
-		if existsReq.Type == models.ChildSecondStage && existsReq.Status == "pending" {
+		if (existsReq.Type == models.ChildFirstStage ||
+			existsReq.Type == models.ChildSecondStage ||
+			existsReq.Type == models.ChildThirdStage) &&
+			existsReq.Status == PendingReqStatus {
 			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: child has already created this request")
 		}
 	}
+	childReq.Child.BirthDate = child.BirthDate
 
 	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
 	if err != nil {
@@ -161,7 +279,42 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 	return req, http.StatusOK, nil
 }
 
-func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, childReq models.ChildThirdRegReq, parent models.Parent) (models.RegReqFull, int, error) {
+func (rru *regReqUsecase) FixSecondRegistrationChildStage(ctx context.Context, childReq models.FixChildSecondRegReq, parent models.Parent) (int, error) {
+	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
+	}
+	if req.Status == PendingReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
+	}
+
+	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to get child data with err: %s", err)
+	}
+	childReq.Child.BirthDate = child.BirthDate
+
+	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to update child data with err: %s", err)
+	}
+
+	err = rru.userPsql.UpdateParentChildRelationship(ctx, parent.ID, child.ID, childReq.Relationship)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to update parent and child relationship with err: %s", err)
+	}
+
+	err = rru.psql.FixRegReq(ctx, childReq.ReqID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to fix request with err: %s", err)
+	}
+
+	return http.StatusOK, nil
+}
+
+func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, childReq models.ChildThirdRegReq) (models.RegReqFull, int, error) {
 	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
 	if err != nil {
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child data with err: %s", err)
@@ -172,7 +325,10 @@ func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, child
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child's requests: %s", err)
 	}
 	for _, existsReq := range respList {
-		if existsReq.Type == models.ChildThirdStage && existsReq.Status == "pending" {
+		if (existsReq.Type == models.ChildFirstStage ||
+			existsReq.Type == models.ChildSecondStage ||
+			existsReq.Type == models.ChildThirdStage) &&
+			existsReq.Status == PendingReqStatus {
 			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: child has already created this request")
 		}
 	}
@@ -183,6 +339,25 @@ func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, child
 	}
 
 	return req, http.StatusOK, nil
+}
+
+func (rru *regReqUsecase) FixThirdRegistrationChildStage(ctx context.Context, childReq models.FixChildThirdRegReq) (int, error) {
+	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
+	}
+	if req.Status == PendingReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
+	}
+
+	err = rru.psql.FixRegReq(ctx, childReq.ReqID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to create verification request with err: %s", err)
+	}
+
+	return http.StatusOK, nil
 }
 
 func (rru *regReqUsecase) completeThirdRegistrationChildStage(ctx context.Context, uid uint64) error {
@@ -214,6 +389,9 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 	req, err := rru.psql.GetRegRequestByID(ctx, reqID)
 	if err != nil {
 		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to find request with err: %s", err)
+	}
+	if req.Status == FailedReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.CompleteRegReq: request has been already in failed status")
 	}
 
 	switch req.Type {
@@ -249,6 +427,24 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 	_, err = rru.psql.DeleteRegReq(ctx, reqID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to delete request after completed with err: %s", err)
+	}
+
+	return http.StatusOK, nil
+}
+
+func (rru *regReqUsecase) FailedRegReq(ctx context.Context, managerID uint64, failedReq models.FailedReq) (int, error) {
+	req, err := rru.psql.GetRegRequestByID(ctx, failedReq.ReqId)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FailedRegReq: failed to get request with err: %s", err)
+	}
+	if req.Status == FailedReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FailedRegReq: request has been already in failed status")
+	}
+	err = rru.psql.FailedRegReq(ctx, managerID, failedReq)
+	if err == pgx.ErrNoRows {
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FailedRegReq: request not found")
+	} else if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FailedRegReq: failed to update request with err: %s", err)
 	}
 
 	return http.StatusOK, nil

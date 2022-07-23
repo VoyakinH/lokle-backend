@@ -100,3 +100,28 @@ func FullRegReqToSimpleRespList(reqs []models.RegReqFull) models.RegReqRespList 
 	}
 	return respList
 }
+
+func RegReqsWithUserToRespList(reqs []models.RegReqWithUser) models.RegReqWithUserRespList {
+	var respList models.RegReqWithUserRespList
+	tempManager := &models.UserRes{}
+	var tempManagerRes models.UserRes
+	for _, req := range reqs {
+		if req.Manager != nil {
+			tempManagerRes = UserToUserRes(*req.Manager)
+			tempManager = &tempManagerRes
+		} else {
+			tempManager = nil
+		}
+		respList = append(respList, models.RegReqWithUserResp{
+			ID:          req.ID,
+			User:        UserToUserRes(req.User),
+			Manager:     tempManager,
+			Type:        req.Type.String(),
+			Status:      req.Status,
+			CreateTime:  req.CreateTime,
+			TimeInQueue: req.TimeInQueue,
+			Message:     req.Message,
+		})
+	}
+	return respList
+}
