@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/VoyakinH/lokle_backend/internal/models"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/crypt"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/hasher"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/mailer"
 	pswdgenerator "github.com/VoyakinH/lokle_backend/internal/pkg/psw_generator"
@@ -66,11 +67,11 @@ func (rru *regReqUsecase) CreateVerifyParentPassportReq(ctx context.Context, par
 		}
 	}
 
-	hashedPassport, err := hasher.HashAndSalt(req.Passport)
+	encryptedPassport, err := crypt.Encrypt(req.Passport)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CreateVerifyParentPassportReq: failed to hash passport with err: %s", err)
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CreateVerifyParentPassportReq: failed to encrypt parent passport with err: %s", err)
 	}
-	req.Passport = hashedPassport
+	req.Passport = encryptedPassport
 
 	_, err = rru.userPsql.UpdateParentPassport(ctx, parent.ID, req.Passport)
 	if err != nil {
@@ -97,11 +98,11 @@ func (rru *regReqUsecase) FixVerifyParentPassportReq(ctx context.Context, parent
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to get request with err: %s", err)
 	}
 
-	hashedPassport, err := hasher.HashAndSalt(reqFix.Passport)
+	encryptedPassport, err := crypt.Encrypt(reqFix.Passport)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to hash passport with err: %s", err)
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to encrypt parent passport with err: %s", err)
 	}
-	reqFix.Passport = hashedPassport
+	reqFix.Passport = encryptedPassport
 
 	_, err = rru.userPsql.UpdateParentPassport(ctx, parent.ID, reqFix.Passport)
 	if err != nil {
@@ -260,6 +261,11 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 		}
 	}
 	childReq.Child.BirthDate = child.BirthDate
+	encryptedPassport, err := crypt.Encrypt(childReq.Child.Passport)
+	if err != nil {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to encrypt child passport with err: %s", err)
+	}
+	childReq.Child.Passport = encryptedPassport
 
 	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
 	if err != nil {
@@ -295,6 +301,11 @@ func (rru *regReqUsecase) FixSecondRegistrationChildStage(ctx context.Context, c
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to get child data with err: %s", err)
 	}
 	childReq.Child.BirthDate = child.BirthDate
+	encryptedPassport, err := crypt.Encrypt(childReq.Child.Passport)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to encrypt child passport with err: %s", err)
+	}
+	childReq.Child.Passport = encryptedPassport
 
 	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
 	if err != nil {

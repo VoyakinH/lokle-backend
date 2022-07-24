@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/VoyakinH/lokle_backend/internal/models"
+	"github.com/VoyakinH/lokle_backend/internal/pkg/crypt"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/hasher"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/mailer"
 	"github.com/VoyakinH/lokle_backend/internal/user/repository"
@@ -236,6 +237,11 @@ func (uu *userUsecase) GetParentByUID(ctx context.Context, uid uint64) (models.P
 	} else if err != nil {
 		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: parent not found")
 	}
+	decryptedPassport, err := crypt.Decrypt(parent.Passport)
+	if err != nil {
+		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: failed to decrypt parent passport %s", err)
+	}
+	parent.Passport = decryptedPassport
 	return parent, http.StatusOK, nil
 }
 
@@ -246,6 +252,11 @@ func (uu *userUsecase) GetChildByUID(ctx context.Context, uid uint64) (models.Ch
 	} else if err != nil {
 		return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: %s", err)
 	}
+	decryptedPassport, err := crypt.Decrypt(child.Passport)
+	if err != nil {
+		return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: failed to decrypt child passport %s", err)
+	}
+	child.Passport = decryptedPassport
 	return child, http.StatusOK, nil
 }
 
@@ -313,6 +324,14 @@ func (uu *userUsecase) GetParentChildren(ctx context.Context, pid uint64) (model
 	respList, err := uu.psql.GetParentChildren(ctx, pid)
 	if err != nil {
 		return models.ChildWithRegReqList{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentChildren: %s", err)
+	}
+	for i := range respList {
+		decryptedPassport, err := crypt.Decrypt(respList[i].Child.Passport)
+		if err != nil {
+			return models.ChildWithRegReqList{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentChildren: %s", err)
+		}
+		respList[i].Child.Passport = decryptedPassport
+
 	}
 	return respList, http.StatusOK, nil
 }
