@@ -40,11 +40,10 @@ func SetUserRouting(router *mux.Router,
 	userAPI.Handle("/parent", auth.WithAuth(http.HandlerFunc(userDelivery.GetParent))).Methods(http.MethodGet)
 	userAPI.Handle("/parent/children", auth.WithAuth(roleMw.CheckParent(http.HandlerFunc(userDelivery.GetParentChildren)))).Methods(http.MethodGet)
 
-	userAPI.HandleFunc("/manager", userDelivery.SignupManager).Methods(http.MethodPost)
-
 	userAPI.HandleFunc("/email", userDelivery.EmailVerification).Methods(http.MethodGet)
 	userAPI.HandleFunc("/email", userDelivery.RepeatEmailVerification).Methods(http.MethodPost)
 
+	userAPI.Handle("/admin/manager", auth.WithAuth(roleMw.CheckAdmin(http.HandlerFunc(userDelivery.SignupManager)))).Methods(http.MethodPost)
 	userAPI.Handle("/admin/managers", auth.WithAuth(roleMw.CheckAdmin(http.HandlerFunc(userDelivery.GetManagers)))).Methods(http.MethodGet)
 
 	userAPI.Handle("/child", auth.WithAuth(roleMw.CheckManager(http.HandlerFunc(userDelivery.GetChildByUID)))).Methods(http.MethodGet)
@@ -248,6 +247,12 @@ func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
 
 func (ud *UserDelivery) SignupManager(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	user := ctx_utils.GetUser(ctx)
+	if user == nil {
+		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
 
 	var manager models.User
 	err := ioutils.ReadJSON(r, &manager)

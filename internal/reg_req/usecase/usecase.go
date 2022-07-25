@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/VoyakinH/lokle_backend/internal/file"
 	"github.com/VoyakinH/lokle_backend/internal/models"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/crypt"
 	"github.com/VoyakinH/lokle_backend/internal/pkg/hasher"
@@ -41,13 +42,18 @@ type IRegReqUsecase interface {
 type regReqUsecase struct {
 	psql     repository.IPostgresqlRepository
 	userPsql user_repository.IPostgresqlRepository
+	fm       file.FileManager
 	logger   logrus.Logger
 }
 
-func NewRegReqUsecase(pr repository.IPostgresqlRepository, ur user_repository.IPostgresqlRepository, logger logrus.Logger) IRegReqUsecase {
+func NewRegReqUsecase(pr repository.IPostgresqlRepository,
+	ur user_repository.IPostgresqlRepository,
+	fm file.FileManager,
+	logger logrus.Logger) IRegReqUsecase {
 	return &regReqUsecase{
 		psql:     pr,
 		userPsql: ur,
+		fm:       fm,
 		logger:   logger,
 	}
 }
@@ -374,24 +380,24 @@ func (rru *regReqUsecase) FixThirdRegistrationChildStage(ctx context.Context, ch
 func (rru *regReqUsecase) completeThirdRegistrationChildStage(ctx context.Context, uid uint64) error {
 	err := rru.userPsql.VerifyStageForChild(ctx, uid, models.ThirdStage)
 	if err != nil {
-		return fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to verify first stage for old students in db with err: %s", err)
+		return fmt.Errorf("failed to verify first stage for old students in db with err: %s", err)
 	}
 	user, err := rru.userPsql.GetUserByID(ctx, uid)
 	if err != nil {
-		return fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to find user for child with err: %s", err)
+		return fmt.Errorf("failed to find user for child with err: %s", err)
 	}
 	childPswd := pswdgenerator.GeneratePassword(10, 0, 2, 2)
 	hashedPswd, err := hasher.HashAndSalt(childPswd)
 	if err != nil {
-		return fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to hash password with err: %s", err)
+		return fmt.Errorf("failed to hash password with err: %s", err)
 	}
 	err = rru.userPsql.UpdateUserPswd(ctx, user.ID, hashedPswd)
 	if err != nil {
-		return fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to update child password with err: %s", err)
+		return fmt.Errorf("failed to update child password with err: %s", err)
 	}
 	err = mailer.SendCompleteChildRegistrationEmail(user.Email, user.FirstName, user.SecondName, childPswd)
 	if err != nil {
-		return fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to send email with credentials to child with err: %s", err)
+		return fmt.Errorf("failed to send email with credentials to child with err: %s", err)
 	}
 	return nil
 }
@@ -410,6 +416,10 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 		err = rru.userPsql.VerifyParentPassport(ctx, req.UserID)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to verify parent passport in db with err: %s", err)
+		}
+		err = rru.fm.DeleteDir(ctx, req.UserID, models.ParentRole)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to delete parent dir with err: %s", err)
 		}
 	case models.ChildFirstStageForStudent:
 		err = rru.completeThirdRegistrationChildStage(ctx, req.UserID)
@@ -430,6 +440,10 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 		err = rru.completeThirdRegistrationChildStage(ctx, req.UserID)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: %s", err)
+		}
+		err = rru.fm.DeleteDir(ctx, req.UserID, models.ChildRole)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to delete child dir with err: %s", err)
 		}
 	default:
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: unknown request type %s", req.Type.String())

@@ -27,7 +27,6 @@ func ParentToParentRes(parent models.Parent) models.ParentRes {
 	return models.ParentRes{
 		Passport:         parent.Passport,
 		PassportVerified: parent.PassportVerified,
-		DirPath:          parent.DirPath,
 	}
 }
 

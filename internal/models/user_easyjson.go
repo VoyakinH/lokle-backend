@@ -339,12 +339,10 @@ func easyjson9e1087fdDecodeGithubComVoyakinHLokleBackendInternalModels3(in *jlex
 			continue
 		}
 		switch key {
-		case "pasport":
+		case "passport":
 			out.Passport = string(in.String())
 		case "passport_verified":
 			out.PassportVerified = bool(in.Bool())
-		case "dir_path":
-			out.DirPath = string(in.String())
 		default:
 			in.SkipRecursive()
 		}
@@ -359,20 +357,21 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels3(out *jwr
 	out.RawByte('{')
 	first := true
 	_ = first
-	{
-		const prefix string = ",\"pasport\":"
+	if in.Passport != "" {
+		const prefix string = ",\"passport\":"
+		first = false
 		out.RawString(prefix[1:])
 		out.String(string(in.Passport))
 	}
 	{
 		const prefix string = ",\"passport_verified\":"
-		out.RawString(prefix)
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
 		out.Bool(bool(in.PassportVerified))
-	}
-	{
-		const prefix string = ",\"dir_path\":"
-		out.RawString(prefix)
-		out.String(string(in.DirPath))
 	}
 	out.RawByte('}')
 }

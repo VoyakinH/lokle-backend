@@ -28,8 +28,8 @@ type IUserUsecase interface {
 	GetUserByID(context.Context, uint64) (models.User, int, error)
 	GetParentByUID(context.Context, uint64) (models.Parent, int, error)
 	GetChildByUID(context.Context, uint64) (models.Child, int, error)
-	CreateParentDirPath(context.Context, uint64, string) (string, int, error)
-	CreateChildDirPath(context.Context, uint64, string) (string, int, error)
+	UpdateParentDirPath(context.Context, uint64, string) (string, int, error)
+	UpdateChildDirPath(context.Context, uint64, string) (string, int, error)
 	CreateParent(context.Context, uint64) (models.Parent, int, error)
 	CreateManager(context.Context, models.User) (models.User, int, error)
 	CheckParentChild(context.Context, uint64, uint64) (bool, int, error)
@@ -237,11 +237,18 @@ func (uu *userUsecase) GetParentByUID(ctx context.Context, uid uint64) (models.P
 	} else if err != nil {
 		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: parent not found")
 	}
-	decryptedPassport, err := crypt.Decrypt(parent.Passport)
-	if err != nil {
-		return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: failed to decrypt parent passport %s", err)
+	// if passport not verified we decrypt it for check on client
+	// else we clean it
+	if !parent.PassportVerified {
+		decryptedPassport, err := crypt.Decrypt(parent.Passport)
+		if err != nil {
+			return models.Parent{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetParentByID: failed to decrypt parent passport %s", err)
+		}
+		parent.Passport = decryptedPassport
+	} else {
+		parent.Passport = ""
 	}
-	parent.Passport = decryptedPassport
+
 	return parent, http.StatusOK, nil
 }
 
@@ -260,16 +267,16 @@ func (uu *userUsecase) GetChildByUID(ctx context.Context, uid uint64) (models.Ch
 	return child, http.StatusOK, nil
 }
 
-func (uu *userUsecase) CreateParentDirPath(ctx context.Context, pid uint64, path string) (string, int, error) {
-	insertedDirPath, err := uu.psql.CreateParentDirPath(ctx, pid, path)
+func (uu *userUsecase) UpdateParentDirPath(ctx context.Context, uid uint64, path string) (string, int, error) {
+	insertedDirPath, err := uu.psql.UpdateParentDirPath(ctx, uid, path)
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateParentDirPath: %s", err)
 	}
 	return insertedDirPath, http.StatusOK, nil
 }
 
-func (uu *userUsecase) CreateChildDirPath(ctx context.Context, cid uint64, path string) (string, int, error) {
-	insertedDirPath, err := uu.psql.CreateChildDirPath(ctx, cid, path)
+func (uu *userUsecase) UpdateChildDirPath(ctx context.Context, uid uint64, path string) (string, int, error) {
+	insertedDirPath, err := uu.psql.UpdateChildDirPath(ctx, uid, path)
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf("UserUsecase.CreateChildDirPath: %s", err)
 	}

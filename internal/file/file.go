@@ -2,6 +2,7 @@ package file
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/VoyakinH/lokle_backend/config"
 	"github.com/VoyakinH/lokle_backend/internal/models"
@@ -27,7 +29,10 @@ type FileManager struct {
 	logger      logrus.Logger
 }
 
-func SetFileRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware.AuthMiddleware, logger logrus.Logger) {
+func SetFileRouting(router *mux.Router,
+	uu usecase.IUserUsecase,
+	auth middleware.AuthMiddleware,
+	logger logrus.Logger) FileManager {
 	fileManager := FileManager{
 		rootPath:    config.File.RootPath,
 		userUseCase: uu,
@@ -37,6 +42,8 @@ func SetFileRouting(router *mux.Router, uu usecase.IUserUsecase, auth middleware
 	fileAPI := router.PathPrefix("/api/v1/file/").Subrouter()
 	fileAPI.Handle("/upload", auth.WithAuth(http.HandlerFunc(fileManager.Upload))).Methods(http.MethodPost)
 	fileAPI.Handle("/download", auth.WithAuth(http.HandlerFunc(fileManager.Download))).Methods(http.MethodPost)
+
+	return fileManager
 }
 
 const MaxUploadSize = 5 << 20 // 5MB
@@ -131,7 +138,6 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		if user.ID == userID {
 			uploadUser.DirPath = parent.DirPath
-			uploadUser.RoleID = parent.ID
 			uploadUser.Email = parent.Email
 			uploadUser.Role = parent.Role
 		} else {
@@ -153,7 +159,6 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			uploadUser.DirPath = child.DirPath
-			uploadUser.RoleID = child.ID
 			uploadUser.Email = child.Email
 			uploadUser.Role = child.Role
 		}
@@ -166,7 +171,6 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			uploadUser.DirPath = child.DirPath
-			uploadUser.RoleID = child.ID
 			uploadUser.Email = child.Email
 			uploadUser.Role = child.Role
 		} else {
@@ -182,7 +186,7 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// create user dir path if one not exists
 	if uploadUser.DirPath == "" {
-		hashedPathName, err := hasher.HashAndSalt(uploadUser.Email)
+		hashedPathName, err := hasher.HashAndSalt(fmt.Sprintf("%s%d", uploadUser.Email, time.Now().Unix()))
 		if err != nil {
 			fm.logger.Errorf("%s failed to create hash for user path with [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusInternalServerError, err)
 			ioutils.SendError(w, http.StatusInternalServerError, "internal")
@@ -199,7 +203,7 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		switch uploadUser.Role {
 		case models.ParentRole:
-			createdDirPath, status, err := fm.userUseCase.CreateParentDirPath(ctx, uploadUser.RoleID, hashedPathName)
+			createdDirPath, status, err := fm.userUseCase.UpdateParentDirPath(ctx, userID, hashedPathName)
 			if err != nil || status != http.StatusOK {
 				fm.logger.Errorf("%s failed update parent dir path [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 				ioutils.SendError(w, status, "internal")
@@ -207,7 +211,7 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 			}
 			uploadUser.DirPath = createdDirPath
 		case models.ChildRole:
-			createdDirPath, status, err := fm.userUseCase.CreateChildDirPath(ctx, uploadUser.RoleID, hashedPathName)
+			createdDirPath, status, err := fm.userUseCase.UpdateChildDirPath(ctx, userID, hashedPathName)
 			if err != nil || status != http.StatusOK {
 				fm.logger.Errorf("%s failed update child dir path [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
 				ioutils.SendError(w, status, "internal")
@@ -243,7 +247,7 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 
 const (
 	applicationForAdmissionFileName = "application_for_admission"
-	applicationForAdmissionExt      = ".jpeg"
+	applicationForAdmissionExt      = ".pdf"
 	staticFilesFolder               = "$2a$04$pjXLPOhYaTaojItSmcCOc.1z6rzr9pXSWLrBtNLlljzfvTCZGyJA6/"
 )
 
@@ -397,11 +401,132 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	if err != nil {
-		fm.logger.Errorf("%s failed finding file %s [status=%d]", r.URL, req.FileName, http.StatusInternalServerError)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
+	if err != nil || userFile == "" {
+		fm.logger.Errorf("%s failed finding file %s [status=%d]", r.URL, req.FileName, http.StatusNotFound)
+		ioutils.SendError(w, http.StatusNotFound, "internal")
 		return
 	}
 	filePath := fmt.Sprintf("%s/%s%s", fm.rootPath, userDirPath, userFile)
 	fm.sendFile(w, filePath, r.URL.String())
+}
+
+func isDirEmpty(name string) (bool, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	// read in ONLY one file
+	_, err = f.Readdir(1)
+
+	// and if the file is EOF... well, the dir is empty.
+	if err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
+
+func (fm *FileManager) DeleteFile(ctx context.Context, uid uint64, userRole models.Role, fileName string) error {
+	var userDirPath string
+	switch userRole {
+	case models.ParentRole:
+		parent, status, err := fm.userUseCase.GetParentByUID(ctx, uid)
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed get parent user [role=%s] [error=%s]", userRole.String(), err)
+		}
+		userDirPath = parent.DirPath
+	case models.ChildRole:
+		child, status, err := fm.userUseCase.GetChildByUID(ctx, uid)
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed get child user [role=%s] [error=%s]", userRole.String(), err)
+		}
+		userDirPath = child.DirPath
+	default:
+		return fmt.Errorf("FileManager.DeleteFile: unknown role while getting dir path [role=%s]", userRole.String())
+	}
+
+	userDir := fmt.Sprintf("%s/%s", fm.rootPath, userDirPath)
+	filePath := fmt.Sprintf("%s/%s", userDir, fileName)
+	err := os.Remove(filePath)
+	if err != nil {
+		return fmt.Errorf("FileManager.DeleteFile: failed to remove user file [role=%s] [error=%s]", userRole.String(), err)
+	}
+
+	dirIsEmpty, err := isDirEmpty(userDir)
+	if err != nil {
+		return fmt.Errorf("FileManager.DeleteFile: failed to check contant of user dir [role=%s] [error=%s]", userRole.String(), err)
+	}
+
+	// delete dir path from db
+	if dirIsEmpty {
+		switch userRole {
+		case models.ParentRole:
+			_, status, err := fm.userUseCase.UpdateParentDirPath(ctx, uid, "")
+			if err != nil || status != http.StatusOK {
+				return fmt.Errorf("FileManager.DeleteFile: failed delete parent dir from db [role=%s] [error=%s]", userRole.String(), err)
+			}
+		case models.ChildRole:
+			_, status, err := fm.userUseCase.UpdateChildDirPath(ctx, uid, "")
+			if err != nil || status != http.StatusOK {
+				return fmt.Errorf("FileManager.DeleteFile: failed delete user dir from db [role=%s] [error=%s]", userRole.String(), err)
+			}
+		default:
+			return fmt.Errorf("FileManager.DeleteFile: unknown role while deleting dir path [role=%s]", userRole.String())
+		}
+	}
+
+	// rm dir
+	err = os.Remove(userDir)
+	if err != nil {
+		return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+	}
+
+	return nil
+}
+
+func (fm *FileManager) DeleteDir(ctx context.Context, uid uint64, userRole models.Role) error {
+	var userDirPath string
+	switch userRole {
+	case models.ParentRole:
+		parent, status, err := fm.userUseCase.GetParentByUID(ctx, uid)
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed get parent user [role=%s] [error=%s]", userRole.String(), err)
+		}
+		userDirPath = parent.DirPath
+	case models.ChildRole:
+		child, status, err := fm.userUseCase.GetChildByUID(ctx, uid)
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed get child user [role=%s] [error=%s]", userRole.String(), err)
+		}
+		userDirPath = child.DirPath
+	default:
+		return fmt.Errorf("FileManager.DeleteFile: unknown role while getting dir path [role=%s]", userRole.String())
+	}
+
+	userDir := fmt.Sprintf("%s/%s", fm.rootPath, userDirPath)
+
+	// delete dir path from db
+	switch userRole {
+	case models.ParentRole:
+		_, status, err := fm.userUseCase.UpdateParentDirPath(ctx, uid, "")
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed delete parent dir from db [role=%s] [error=%s]", userRole.String(), err)
+		}
+	case models.ChildRole:
+		_, status, err := fm.userUseCase.UpdateChildDirPath(ctx, uid, "")
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("FileManager.DeleteFile: failed delete user dir from db [role=%s] [error=%s]", userRole.String(), err)
+		}
+	default:
+		return fmt.Errorf("FileManager.DeleteFile: unknown role while deleting dir path [role=%s]", userRole.String())
+	}
+
+	// rm dir
+	err := os.RemoveAll(userDir)
+	if err != nil {
+		return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+	}
+
+	return nil
 }

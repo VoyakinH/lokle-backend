@@ -22,8 +22,8 @@ type IPostgresqlRepository interface {
 	VerifyEmail(context.Context, string) (uint64, error)
 	CreateParent(context.Context, uint64) (models.Parent, error)
 	CreateChild(context.Context, uint64, uint64, models.Child) (models.Child, error)
-	CreateParentDirPath(context.Context, uint64, string) (string, error)
-	CreateChildDirPath(context.Context, uint64, string) (string, error)
+	UpdateParentDirPath(context.Context, uint64, string) (string, error)
+	UpdateChildDirPath(context.Context, uint64, string) (string, error)
 	UpdateParentPassport(context.Context, uint64, string) (string, error)
 	VerifyParentPassport(context.Context, uint64) error
 	VerifyStageForChild(context.Context, uint64, models.Stage) error
@@ -384,14 +384,14 @@ func (pr *postgresqlRepository) GetChildByID(ctx context.Context, cid uint64) (m
 	return child, nil
 }
 
-func (pr *postgresqlRepository) CreateParentDirPath(ctx context.Context, pid uint64, path string) (string, error) {
+func (pr *postgresqlRepository) UpdateParentDirPath(ctx context.Context, uid uint64, path string) (string, error) {
 	var insertedDirPath string
 	err := pr.conn.QueryRow(
 		`UPDATE parents
 		SET dir_path = $2
-		WHERE id = $1
+		WHERE user_id = $1
 		RETURNING dir_path;`,
-		pid,
+		uid,
 		path,
 	).Scan(
 		&insertedDirPath,
@@ -403,14 +403,14 @@ func (pr *postgresqlRepository) CreateParentDirPath(ctx context.Context, pid uin
 	return insertedDirPath, nil
 }
 
-func (pr *postgresqlRepository) CreateChildDirPath(ctx context.Context, cid uint64, path string) (string, error) {
+func (pr *postgresqlRepository) UpdateChildDirPath(ctx context.Context, uid uint64, path string) (string, error) {
 	var insertedDirPath string
 	err := pr.conn.QueryRow(
 		`UPDATE children
 		SET dir_path = $2
-		WHERE id = $1
+		WHERE user_id = $1
 		RETURNING dir_path;`,
-		cid,
+		uid,
 		path,
 	).Scan(
 		&insertedDirPath,

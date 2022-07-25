@@ -33,19 +33,25 @@ func main() {
 	rur := user_repository.NewRedisUserRepository(config.RedisUser, *logger)
 	rrr := reg_req_repository.NewPostgresqlRepository(config.Postgres, *logger)
 
+	// router
+	router := mux.NewRouter()
+
 	// usecase
 	uu := user_usecase.NewUserUsecase(ur, rsr, rur, *logger)
-	rru := reg_req_usecase.NewRegReqUsecase(rrr, ur, *logger)
 
 	// middlewars
 	auth := middleware.NewAuthMiddleware(uu, *logger)
 	roleMw := middleware.NewRoleMiddleware(uu, *logger)
 
+	// files
+	fm := file_manager.SetFileRouting(router, uu, auth, *logger)
+
+	// usecase
+	rru := reg_req_usecase.NewRegReqUsecase(rrr, ur, fm, *logger)
+
 	// delivery
-	router := mux.NewRouter()
 	user_delivery.SetUserRouting(router, uu, auth, roleMw, *logger)
 	reg_req_delivery.SetRegReqRouting(router, rru, auth, roleMw, *logger)
-	file_manager.SetFileRouting(router, uu, auth, *logger)
 
 	srv := &http.Server{
 		Handler:      router,
