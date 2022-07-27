@@ -447,8 +447,27 @@ func (fm *FileManager) DeleteFile(ctx context.Context, uid uint64, userRole mode
 	}
 
 	userDir := fmt.Sprintf("%s/%s", fm.rootPath, userDirPath)
-	filePath := fmt.Sprintf("%s/%s", userDir, fileName)
-	err := os.Remove(filePath)
+	var userFile string
+	err := filepath.Walk(userDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fm.logger.Errorf("FileManager.DeleteFile: file walk failed with [role=%d] [error=%s]", userRole.String(), err)
+			return nil
+		}
+		if !info.IsDir() && isEnabledExt(filepath.Ext(path)) && strings.Contains(path, fileName) {
+			if userFile != "" {
+				return fmt.Errorf("FileManager.DeleteFile: found some files with this name: %s", fileName)
+			}
+			userFile = fileName + filepath.Ext(path)
+		}
+		return nil
+	})
+
+	if err != nil || userFile == "" {
+		return fmt.Errorf("failed finding file %s [role=%s]", fileName, userRole.String())
+	}
+
+	filePath := fmt.Sprintf("%s/%s", userDir, userFile)
+	err = os.Remove(filePath)
 	if err != nil {
 		return fmt.Errorf("FileManager.DeleteFile: failed to remove user file [role=%s] [error=%s]", userRole.String(), err)
 	}
@@ -474,12 +493,12 @@ func (fm *FileManager) DeleteFile(ctx context.Context, uid uint64, userRole mode
 		default:
 			return fmt.Errorf("FileManager.DeleteFile: unknown role while deleting dir path [role=%s]", userRole.String())
 		}
-	}
 
-	// rm dir
-	err = os.Remove(userDir)
-	if err != nil {
-		return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+		// rm dir
+		err = os.Remove(userDir)
+		if err != nil {
+			return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+		}
 	}
 
 	return nil

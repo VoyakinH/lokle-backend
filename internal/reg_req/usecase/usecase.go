@@ -417,7 +417,7 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to verify parent passport in db with err: %s", err)
 		}
-		err = rru.fm.DeleteDir(ctx, req.UserID, models.ParentRole)
+		err = rru.fm.DeleteFile(ctx, req.UserID, models.ParentRole, "passport")
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to delete parent dir with err: %s", err)
 		}
@@ -441,7 +441,7 @@ func (rru *regReqUsecase) CompleteRegReq(ctx context.Context, reqID uint64) (int
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: %s", err)
 		}
-		err = rru.fm.DeleteDir(ctx, req.UserID, models.ChildRole)
+		err = rru.fm.DeleteFile(ctx, req.UserID, models.ChildRole, "passport")
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.CompleteRegReq: failed to delete child dir with err: %s", err)
 		}
