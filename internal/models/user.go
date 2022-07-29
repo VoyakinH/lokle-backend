@@ -84,7 +84,7 @@ type Parent struct {
 
 //easyjson:json
 type ParentRes struct {
-	Passport         string `json:"passport,omitempty"`
+	Passport         string `json:"passport"`
 	PassportVerified bool   `json:"passport_verified"`
 }
 
