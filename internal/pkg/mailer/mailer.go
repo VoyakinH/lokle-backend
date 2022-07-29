@@ -17,11 +17,11 @@ func SendVerifiedEmail(to_email string, first_name string, second_name string, t
 	n := gomail.NewDialer("mail.s-kit.moscow", 2, config.Mailer.Email, config.Mailer.Password)
 
 	if err := n.DialAndSend(msg); err != nil {
+		msg.SetHeader("From", config.Mailer.AdditionalEmail)
 		n = gomail.NewDialer("smtp.mail.ru", 465, config.Mailer.AdditionalEmail, config.Mailer.AdditionalPassword)
 		if err := n.DialAndSend(msg); err != nil {
 			return err
 		}
-		return err
 	}
 	return nil
 }
