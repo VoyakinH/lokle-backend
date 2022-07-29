@@ -492,7 +492,7 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels4(out *jwr
 		out.RawString(prefix)
 		out.Bool(bool(in.EmailVerified))
 	}
-	{
+	if in.Password != "" {
 		const prefix string = ",\"password\":"
 		out.RawString(prefix)
 		out.String(string(in.Password))

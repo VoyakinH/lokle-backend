@@ -46,7 +46,8 @@ func SetUserRouting(router *mux.Router,
 	userAPI.Handle("/admin/manager", auth.WithAuth(roleMw.CheckAdmin(http.HandlerFunc(userDelivery.SignupManager)))).Methods(http.MethodPost)
 	userAPI.Handle("/admin/managers", auth.WithAuth(roleMw.CheckAdmin(http.HandlerFunc(userDelivery.GetManagers)))).Methods(http.MethodGet)
 
-	userAPI.Handle("/child", auth.WithAuth(roleMw.CheckManager(http.HandlerFunc(userDelivery.GetChildByUID)))).Methods(http.MethodGet)
+	userAPI.Handle("/manager/child", auth.WithAuth(roleMw.CheckManager(http.HandlerFunc(userDelivery.GetChildByUID)))).Methods(http.MethodGet)
+	userAPI.Handle("/manager/parent", auth.WithAuth(roleMw.CheckManager(http.HandlerFunc(userDelivery.GetParentByUID)))).Methods(http.MethodGet)
 }
 
 const expCookieTime = 1382400
@@ -293,8 +294,8 @@ func (ud *UserDelivery) GetParentChildren(w http.ResponseWriter, r *http.Request
 
 func (ud *UserDelivery) GetChildByUID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	parent := ctx_utils.GetUser(ctx)
-	if parent == nil {
+	manager := ctx_utils.GetUser(ctx)
+	if manager == nil {
 		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
 		ioutils.SendError(w, http.StatusForbidden, "no auth")
 		return
@@ -321,6 +322,38 @@ func (ud *UserDelivery) GetChildByUID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ioutils.Send(w, status, child)
+}
+
+func (ud *UserDelivery) GetParentByUID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	manager := ctx_utils.GetUser(ctx)
+	if manager == nil {
+		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	parentIDString := r.URL.Query().Get("parent")
+	if parentIDString == "" {
+		ud.logger.Errorf("%s empty query [status=%d]", r.URL, http.StatusBadRequest)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	parentID, err := strconv.ParseUint(parentIDString, 10, 64)
+	if err != nil {
+		ud.logger.Errorf("%s invalid child id parameter [status=%d]", r.URL, http.StatusBadRequest)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	parent, status, err := ud.userUseCase.GetParentByUID(ctx, parentID)
+	if err != nil || status != http.StatusOK {
+		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
+		ioutils.SendError(w, status, "internal")
+		return
+	}
+
+	ioutils.Send(w, status, parent)
 }
 
 func (ud *UserDelivery) GetManagers(w http.ResponseWriter, r *http.Request) {

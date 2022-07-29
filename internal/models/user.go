@@ -75,7 +75,7 @@ type Parent struct {
 	LastName         string `json:"last_name"`
 	Email            string `json:"email"`
 	EmailVerified    bool   `json:"email_verified"`
-	Password         string `json:"password"`
+	Password         string `json:"password,omitempty"`
 	Phone            string `json:"phone"`
 	Passport         string `json:"passport"`
 	PassportVerified bool   `json:"passport_verified"`

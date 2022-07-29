@@ -248,6 +248,7 @@ func (uu *userUsecase) GetParentByUID(ctx context.Context, uid uint64) (models.P
 	} else {
 		parent.Passport = ""
 	}
+	parent.Password = ""
 
 	return parent, http.StatusOK, nil
 }
@@ -259,11 +260,16 @@ func (uu *userUsecase) GetChildByUID(ctx context.Context, uid uint64) (models.Ch
 	} else if err != nil {
 		return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: %s", err)
 	}
-	decryptedPassport, err := crypt.Decrypt(child.Passport)
-	if err != nil {
-		return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: failed to decrypt child passport %s", err)
+	if child.DoneStage <= models.SecondStage {
+		decryptedPassport, err := crypt.Decrypt(child.Passport)
+		if err != nil {
+			return models.Child{}, http.StatusInternalServerError, fmt.Errorf("UserUsecase.GetChildByID: failed to decrypt child passport %s", err)
+		}
+		child.Passport = decryptedPassport
+	} else {
+		child.Passport = ""
 	}
-	child.Passport = decryptedPassport
+
 	return child, http.StatusOK, nil
 }
 
