@@ -26,8 +26,10 @@ type PostgresConfig struct {
 }
 
 type MailerConfig struct {
-	Email    string
-	Password string
+	Email              string
+	Password           string
+	AdditionalEmail    string
+	AdditionalPassword string
 }
 
 type FileConfig struct {
@@ -82,8 +84,10 @@ func SetConfig() {
 	}
 
 	Mailer = MailerConfig{
-		Email:    viper.GetString(`mailer.email`),
-		Password: viper.GetString(`mailer.password`),
+		Email:              viper.GetString(`mailer.email`),
+		Password:           viper.GetString(`mailer.password`),
+		AdditionalEmail:    viper.GetString(`mailer.additional_email`),
+		AdditionalPassword: viper.GetString(`mailer.additional_password`),
 	}
 
 	File = FileConfig{
