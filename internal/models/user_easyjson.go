@@ -357,20 +357,14 @@ func easyjson9e1087fdEncodeGithubComVoyakinHLokleBackendInternalModels3(out *jwr
 	out.RawByte('{')
 	first := true
 	_ = first
-	if in.Passport != "" {
+	{
 		const prefix string = ",\"passport\":"
-		first = false
 		out.RawString(prefix[1:])
 		out.String(string(in.Passport))
 	}
 	{
 		const prefix string = ",\"passport_verified\":"
-		if first {
-			first = false
-			out.RawString(prefix[1:])
-		} else {
-			out.RawString(prefix)
-		}
+		out.RawString(prefix)
 		out.Bool(bool(in.PassportVerified))
 	}
 	out.RawByte('}')
