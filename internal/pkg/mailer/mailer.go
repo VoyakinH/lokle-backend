@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/VoyakinH/lokle_backend/config"
+	"github.com/labstack/gommon/log"
 	"gopkg.in/gomail.v2"
 )
 
@@ -17,6 +18,7 @@ func SendVerifiedEmail(to_email string, first_name string, second_name string, t
 	n := gomail.NewDialer("mail.s-kit.moscow", 25, config.Mailer.Email, config.Mailer.Password)
 
 	if err := n.DialAndSend(msg); err != nil {
+		log.Errorf("Mailer.SendVerefiedEmail: failed send email via kit smpt server with err: %s", err)
 		msg.SetHeader("From", config.Mailer.AdditionalEmail)
 		n = gomail.NewDialer("smtp.mail.ru", 465, config.Mailer.AdditionalEmail, config.Mailer.AdditionalPassword)
 		if err := n.DialAndSend(msg); err != nil {
@@ -33,10 +35,15 @@ func SendCompleteChildRegistrationEmail(to_email string, first_name string, seco
 	msg.SetHeader("Subject", "Регистрация Столичный-КИТ")
 	msg.SetBody("text/html", fmt.Sprintf("Приветствуем, %s %s! <br/> Ваши данные для входа: <br/>  Логин: %s <br/> Пароль: %s <br/> Если Вы получили это письмо по ошибке, просто игнорируйте его. <br/>", first_name, second_name, to_email, password))
 
-	n := gomail.NewDialer("smtp.mail.ru", 465, config.Mailer.Email, config.Mailer.Password)
+	n := gomail.NewDialer("mail.s-kit.moscow", 25, config.Mailer.Email, config.Mailer.Password)
 
 	if err := n.DialAndSend(msg); err != nil {
-		return err
+		log.Errorf("Mailer.SendCompleteChildRegistrationEmail: failed send email via kit smpt server with err: %s", err)
+		msg.SetHeader("From", config.Mailer.AdditionalEmail)
+		n = gomail.NewDialer("smtp.mail.ru", 465, config.Mailer.AdditionalEmail, config.Mailer.AdditionalPassword)
+		if err := n.DialAndSend(msg); err != nil {
+			return err
+		}
 	}
 	return nil
 }
