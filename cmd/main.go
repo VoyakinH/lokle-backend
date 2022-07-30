@@ -61,5 +61,5 @@ func main() {
 	}
 	logger.Infof("starting server at %s\n", srv.Addr)
 
-	logger.Fatal(srv.ListenAndServe())
+	logger.Fatal(srv.ListenAndServeTLS("kit-lokle.crt", "kit-lokle.key"))
 }
