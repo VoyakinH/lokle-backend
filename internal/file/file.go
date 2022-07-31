@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,11 +43,15 @@ func SetFileRouting(router *mux.Router,
 	fileAPI := router.PathPrefix("/api/v1/file/").Subrouter()
 	fileAPI.Handle("/upload", auth.WithAuth(http.HandlerFunc(fileManager.Upload))).Methods(http.MethodPost)
 	fileAPI.Handle("/download", auth.WithAuth(http.HandlerFunc(fileManager.Download))).Methods(http.MethodPost)
+	fileAPI.Handle("/delete", auth.WithAuth(http.HandlerFunc(fileManager.Delete))).Methods(http.MethodPost)
 
 	return fileManager
 }
 
-const MaxUploadSize = 5 << 20 // 5MB
+const (
+	MaxUploadFilesSize = 32 << 20 // 32MB
+	MaxUploadFileSize  = 2 << 20  // 2MB
+)
 
 func isEnabledFileType(fileType string) bool {
 	imgTypes := map[string]bool{
@@ -90,37 +95,17 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// validate max file size
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		fm.logger.Errorf("%s file is too big [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "file is too big")
-		return
-	}
-
-	// find file
-	file, fileHeader, err := r.FormFile("file")
-	if err != nil {
-		fm.logger.Errorf("%s can't to find file in req [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
-		return
-	}
-	defer file.Close()
-
-	// validate file type
-	buf := make([]byte, fileHeader.Size)
-	file.Read(buf)
-	fileType := http.DetectContentType(buf)
-	if !isEnabledFileType(fileType) {
-		fm.logger.Errorf("%s forbidden file type %s [status=%d]", r.URL, fileType, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
-		return
-	}
-
 	userIDString := r.FormValue("userID")
 	userID, err := strconv.ParseUint(userIDString, 10, 64)
 	if err != nil {
 		fm.logger.Errorf("%s can't to find user id in req [status=%d]", r.URL, http.StatusBadRequest)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	commonFilename := r.FormValue("filename")
+	if err != nil {
+		fm.logger.Errorf("%s can't to find filename in req [status=%d]", r.URL, http.StatusBadRequest)
 		ioutils.SendError(w, http.StatusBadRequest, "bad request")
 		return
 	}
@@ -225,24 +210,92 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// create a new file in the uploads directory
-	fullFilePath := fmt.Sprintf(fm.rootPath + uploadUser.DirPath + fileHeader.Filename)
-	dst, err := os.Create(fullFilePath)
-	if err != nil {
-		fm.logger.Errorf("%s failed to create new file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	defer dst.Close()
+	sameFilesCount := 0
+	err = filepath.Walk(fm.rootPath+uploadUser.DirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fm.logger.Errorf("%s file walk failed with [status=%d] [error=%s]", r.URL, http.StatusInternalServerError, err)
+			return nil
+		}
+		if !info.IsDir() && isEnabledExt(filepath.Ext(path)) && strings.Contains(path, commonFilename) {
+			sameFilesCount += 1
+		}
+		return nil
+	})
 
-	// copy the uploaded file to the filesystem
-	// at the specified destination
-	_, err = io.Copy(dst, bytes.NewReader(buf))
 	if err != nil {
-		fm.logger.Errorf("%s failed to save user file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
+		fm.logger.Errorf("%s failed check files in user dir %s [status=%d]", r.URL, http.StatusInternalServerError)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
+
+	// validate max file size
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadFilesSize)
+	if err := r.ParseMultipartForm(MaxUploadFilesSize); err != nil {
+		fm.logger.Errorf("%s files is too big [status=%d]", r.URL, http.StatusBadRequest)
+		ioutils.SendError(w, http.StatusBadRequest, "files is too big")
+		return
+	}
+
+	// find file
+	files := r.MultipartForm.File["file"]
+	// file, fileHeader, err := r.FormFile("file")
+	// if err != nil {
+	// 	fm.logger.Errorf("%s can't to find file in req [status=%d]", r.URL, http.StatusBadRequest)
+	// 	ioutils.SendError(w, http.StatusBadRequest, "bad request")
+	// 	return
+	// }
+	// defer file.Close()
+
+	for _, fileHeader := range files {
+		if fileHeader.Size > MaxUploadFileSize {
+			fm.logger.Errorf("%s file is too big [status=%d]", r.URL, http.StatusBadRequest)
+			ioutils.SendError(w, http.StatusBadRequest, "file is too big")
+			return
+		}
+
+		// Open the file
+		file, err := fileHeader.Open()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// validate file type
+		buf := make([]byte, fileHeader.Size)
+		file.Read(buf)
+		fileType := http.DetectContentType(buf)
+		if !isEnabledFileType(fileType) {
+			fm.logger.Errorf("%s forbidden file type %s [status=%d]", r.URL, fileType, http.StatusBadRequest)
+			ioutils.SendError(w, http.StatusBadRequest, "bad request")
+			return
+		}
+
+		// determine filename
+		curFilename := fmt.Sprintf("%s_%d%s", commonFilename, sameFilesCount, filepath.Ext(fileHeader.Filename))
+		// curFilename := commonFilename + "_" + strconv.Itoa(sameFilesCount) +
+
+		// create a new file in the uploads directory
+		fullFilePath := fmt.Sprintf(fm.rootPath + uploadUser.DirPath + curFilename)
+		dst, err := os.Create(fullFilePath)
+		if err != nil {
+			fm.logger.Errorf("%s failed to create new file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
+			ioutils.SendError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		defer dst.Close()
+
+		// copy the uploaded file to the filesystem
+		// at the specified destination
+		_, err = io.Copy(dst, bytes.NewReader(buf))
+		if err != nil {
+			fm.logger.Errorf("%s failed to save user file %s [role=%s] [status=%d] [error=%s]", r.URL, fullFilePath, user.Role.String(), http.StatusInternalServerError, err)
+			ioutils.SendError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+
+		// update files with same name count
+		sameFilesCount += 1
+	}
+
 }
 
 const (
@@ -251,43 +304,68 @@ const (
 	staticFilesFolder               = "$2a$04$pjXLPOhYaTaojItSmcCOc.1z6rzr9pXSWLrBtNLlljzfvTCZGyJA6/"
 )
 
-func (fm *FileManager) sendFile(w http.ResponseWriter, filePath string, handlerURL string) {
-	file, err := os.Open(filePath)
+func (fm *FileManager) sendFile(w http.ResponseWriter, filePaths []string, handlerURL string) {
+	var contentLength int64
+	var contentType string
+	body := &bytes.Buffer{}
+	for _, filePath := range filePaths {
+		file, err := os.Open(filePath)
+		if err != nil {
+			fm.logger.Errorf("%s failed to open user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+			ioutils.SendError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		defer file.Close()
+
+		writer := multipart.NewWriter(body)
+		part, _ := writer.CreateFormFile("file", filepath.Base(file.Name()))
+		io.Copy(part, file)
+		writer.Close()
+
+		file.Seek(0, 0)
+		fileHeader := make([]byte, 512)
+		_, err = file.Read(fileHeader)
+		if err != nil {
+			fm.logger.Errorf("%s failed to read user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+			ioutils.SendError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		fileInfo, _ := file.Stat()
+		fileSize := fileInfo.Size()
+
+		// w.Header().Set("Expires", "0")
+		// w.Header().Set("Content-Transfer-Encoding", "binary")
+		// w.Header().Set("Content-Control", "private, no-transform, no-store, must-revalidate")
+		// // w.Header().Set("Content-Disposition", "attachment; filename="+filePath)
+		// // w.Header().Set("Content-Type", fileType)
+		contentLength += fileSize
+		contentType = writer.FormDataContentType()
+		// file.Seek(0, 0)
+		// fileByte, err := ioutil.ReadAll(file)
+		// if err != nil {
+		// 	fm.logger.Errorf("%s failed to cust file to byte %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+		// 	ioutils.SendError(w, http.StatusInternalServerError, "internal")
+		// 	return
+
+		// }
+		// resp = append(resp, fileByte...)
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(int64(body.Len()), 10))
+	w.Header().Set("Content-Type", contentType)
+	// w.Header().Set("Content-Type", "multipart/form-data")
+	_, err := io.Copy(w, bytes.NewReader(body.Bytes()))
 	if err != nil {
-		fm.logger.Errorf("%s failed to open user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
+		fm.logger.Errorf("%s failed to write files to user %s with [status=%d] [error=%s]", handlerURL, http.StatusInternalServerError, err)
 		ioutils.SendError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	defer file.Close()
-
-	fileHeader := make([]byte, 512)
-	_, err = file.Read(fileHeader)
-	if err != nil {
-		fm.logger.Errorf("%s failed to read user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		return
-	}
-	fileType := http.DetectContentType(fileHeader)
-
-	fileInfo, _ := file.Stat()
-	fileSize := fileInfo.Size()
-
-	w.Header().Set("Expires", "0")
-	w.Header().Set("Content-Transfer-Encoding", "binary")
-	w.Header().Set("Content-Control", "private, no-transform, no-store, must-revalidate")
-	w.Header().Set("Content-Disposition", "attachment; filename="+filePath)
-	w.Header().Set("Content-Type", fileType)
-	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
-
-	file.Seek(0, 0)
-	io.Copy(w, file)
 }
 
 func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := ctx_utils.GetUser(ctx)
 	if user == nil {
-		fm.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
+		fm.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
 		ioutils.SendError(w, http.StatusForbidden, "no auth")
 		return
 	}
@@ -303,7 +381,7 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 	// static file
 	if req.FileName == applicationForAdmissionFileName {
 		filePath := fmt.Sprintf("%s/%s%s%s", fm.rootPath, staticFilesFolder, applicationForAdmissionFileName, applicationForAdmissionExt)
-		fm.sendFile(w, filePath, r.URL.String())
+		fm.sendFile(w, []string{filePath}, r.URL.String())
 		return
 	}
 
@@ -386,28 +464,105 @@ func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userFile string
+	var userFiles []string
+	sameFilesCount := 0
 	err = filepath.Walk(fm.rootPath+userDirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fm.logger.Errorf("%s file walk failed with [status=%d] [error=%s]", r.URL, http.StatusInternalServerError, err)
 			return nil
 		}
 		if !info.IsDir() && isEnabledExt(filepath.Ext(path)) && strings.Contains(path, req.FileName) {
-			if userFile != "" {
-				return fmt.Errorf("found some files with this name")
-			}
-			userFile = req.FileName + filepath.Ext(path)
+			userFiles = append(userFiles, fmt.Sprintf("%s/%s%s_%d%s", fm.rootPath, userDirPath, req.FileName, sameFilesCount, filepath.Ext(path)))
+			sameFilesCount += 1
 		}
 		return nil
 	})
 
-	if err != nil || userFile == "" {
+	if err != nil || len(userFiles) == 0 {
 		fm.logger.Errorf("%s failed finding file %s [status=%d]", r.URL, req.FileName, http.StatusNotFound)
-		ioutils.SendError(w, http.StatusNotFound, "internal")
+		ioutils.SendError(w, http.StatusNotFound, "not found")
 		return
 	}
-	filePath := fmt.Sprintf("%s/%s%s", fm.rootPath, userDirPath, userFile)
-	fm.sendFile(w, filePath, r.URL.String())
+	// filePath := fmt.Sprintf("%s/%s%s", fm.rootPath, userDirPath, userFile)
+	fm.sendFile(w, userFiles, r.URL.String())
+}
+
+func (fm *FileManager) Delete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := ctx_utils.GetUser(ctx)
+	if user == nil {
+		fm.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
+		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		return
+	}
+
+	var req models.DonwloadReq
+	err := ioutils.ReadJSON(r, &req)
+	if err != nil || req.FileName == "" {
+		fm.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+
+	var userRole models.Role
+	// find user dir path
+	switch user.Role {
+	case models.ParentRole:
+		parent, status, err := fm.userUseCase.GetParentByUID(ctx, user.ID)
+		if err != nil || status != http.StatusOK {
+			fm.logger.Errorf("%s failed get parent user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+			ioutils.SendError(w, status, "internal")
+			return
+		}
+		if user.ID == req.UserID {
+			userRole = parent.Role
+		} else {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, req.UserID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			isParentChild, status, err := fm.userUseCase.CheckParentChild(ctx, parent.ID, child.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed check parent's children [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			if !isParentChild {
+				fm.logger.Errorf("%s user with userID %d there is not a parent's child [role=%s] [status=%d] [error=%s]", r.URL, req.UserID, user.Role.String(), http.StatusForbidden, err)
+				ioutils.SendError(w, http.StatusForbidden, "bad request")
+				return
+			}
+			userRole = child.Role
+		}
+	case models.ChildRole:
+		if user.ID == req.UserID {
+			child, status, err := fm.userUseCase.GetChildByUID(ctx, user.ID)
+			if err != nil || status != http.StatusOK {
+				fm.logger.Errorf("%s failed get child user [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), status, err)
+				ioutils.SendError(w, status, "internal")
+				return
+			}
+			userRole = child.Role
+		} else {
+			fm.logger.Errorf("%s child try to load not own files [role=%s] [status=%d] [error=%s]", r.URL, user.Role.String(), http.StatusForbidden, err)
+			ioutils.SendError(w, http.StatusForbidden, "bad request")
+			return
+		}
+	default:
+		fm.logger.Errorf("%s unknown role while getting dir path [role=%s] [status=%d]", r.URL, user.Role.String(), http.StatusInternalServerError)
+		ioutils.SendError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+
+	err = fm.DeleteFile(ctx, req.UserID, userRole, req.FileName)
+	if err != nil {
+		fm.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
+		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	ioutils.SendWithoutBody(w, http.StatusOK)
 }
 
 func isDirEmpty(name string) (bool, error) {
@@ -447,57 +602,58 @@ func (fm *FileManager) DeleteFile(ctx context.Context, uid uint64, userRole mode
 	}
 
 	userDir := fmt.Sprintf("%s/%s", fm.rootPath, userDirPath)
-	var userFile string
+	var userFiles []string
+	var sameFilesCount int64
 	err := filepath.Walk(userDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fm.logger.Errorf("FileManager.DeleteFile: file walk failed with [role=%d] [error=%s]", userRole.String(), err)
 			return nil
 		}
 		if !info.IsDir() && isEnabledExt(filepath.Ext(path)) && strings.Contains(path, fileName) {
-			if userFile != "" {
-				return fmt.Errorf("FileManager.DeleteFile: found some files with this name: %s", fileName)
-			}
-			userFile = fileName + filepath.Ext(path)
+			userFiles = append(userFiles, fmt.Sprintf("%s/%s%s_%d%s", fm.rootPath, userDirPath, fileName, sameFilesCount, filepath.Ext(path)))
+			sameFilesCount += 1
 		}
 		return nil
 	})
 
-	if err != nil || userFile == "" {
+	if err != nil || len(userFiles) == 0 {
 		return fmt.Errorf("failed finding file %s [role=%s]", fileName, userRole.String())
 	}
 
-	filePath := fmt.Sprintf("%s/%s", userDir, userFile)
-	err = os.Remove(filePath)
-	if err != nil {
-		return fmt.Errorf("FileManager.DeleteFile: failed to remove user file [role=%s] [error=%s]", userRole.String(), err)
-	}
-
-	dirIsEmpty, err := isDirEmpty(userDir)
-	if err != nil {
-		return fmt.Errorf("FileManager.DeleteFile: failed to check contant of user dir [role=%s] [error=%s]", userRole.String(), err)
-	}
-
-	// delete dir path from db
-	if dirIsEmpty {
-		switch userRole {
-		case models.ParentRole:
-			_, status, err := fm.userUseCase.UpdateParentDirPath(ctx, uid, "")
-			if err != nil || status != http.StatusOK {
-				return fmt.Errorf("FileManager.DeleteFile: failed delete parent dir from db [role=%s] [error=%s]", userRole.String(), err)
-			}
-		case models.ChildRole:
-			_, status, err := fm.userUseCase.UpdateChildDirPath(ctx, uid, "")
-			if err != nil || status != http.StatusOK {
-				return fmt.Errorf("FileManager.DeleteFile: failed delete user dir from db [role=%s] [error=%s]", userRole.String(), err)
-			}
-		default:
-			return fmt.Errorf("FileManager.DeleteFile: unknown role while deleting dir path [role=%s]", userRole.String())
+	for _, userFile := range userFiles {
+		// filePath := fmt.Sprintf("%s/%s", userDir, userFile)
+		err = os.Remove(userFile)
+		if err != nil {
+			return fmt.Errorf("FileManager.DeleteFile: failed to remove user file [role=%s] [error=%s]", userRole.String(), err)
 		}
 
-		// rm dir
-		err = os.Remove(userDir)
+		dirIsEmpty, err := isDirEmpty(userDir)
 		if err != nil {
-			return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+			return fmt.Errorf("FileManager.DeleteFile: failed to check contant of user dir [role=%s] [error=%s]", userRole.String(), err)
+		}
+
+		// delete dir path from db
+		if dirIsEmpty {
+			switch userRole {
+			case models.ParentRole:
+				_, status, err := fm.userUseCase.UpdateParentDirPath(ctx, uid, "")
+				if err != nil || status != http.StatusOK {
+					return fmt.Errorf("FileManager.DeleteFile: failed delete parent dir from db [role=%s] [error=%s]", userRole.String(), err)
+				}
+			case models.ChildRole:
+				_, status, err := fm.userUseCase.UpdateChildDirPath(ctx, uid, "")
+				if err != nil || status != http.StatusOK {
+					return fmt.Errorf("FileManager.DeleteFile: failed delete user dir from db [role=%s] [error=%s]", userRole.String(), err)
+				}
+			default:
+				return fmt.Errorf("FileManager.DeleteFile: unknown role while deleting dir path [role=%s]", userRole.String())
+			}
+
+			// rm dir
+			err = os.Remove(userDir)
+			if err != nil {
+				return fmt.Errorf("FileManager.DeleteFile: failed to rm user dir [role=%s] [error=%s]", userRole.String(), err)
+			}
 		}
 	}
 
