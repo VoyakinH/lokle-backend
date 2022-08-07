@@ -3,9 +3,11 @@ package file
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
-	"mime/multipart"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,8 +51,8 @@ func SetFileRouting(router *mux.Router,
 }
 
 const (
-	MaxUploadFilesSize = 32 << 20 // 32MB
-	MaxUploadFileSize  = 2 << 20  // 2MB
+	MaxUploadFilesSize = 120 << 20 // 120MB
+	MaxUploadFileSize  = 5 << 20   // 5MB
 )
 
 func isEnabledFileType(fileType string) bool {
@@ -305,60 +307,25 @@ const (
 )
 
 func (fm *FileManager) sendFile(w http.ResponseWriter, filePaths []string, handlerURL string) {
-	var contentLength int64
-	var contentType string
-	body := &bytes.Buffer{}
+	var resp models.DonwloadResp
 	for _, filePath := range filePaths {
-		file, err := os.Open(filePath)
+		// Read the entire file into a byte slice
+		bytes, err := ioutil.ReadFile(filePath)
 		if err != nil {
-			fm.logger.Errorf("%s failed to open user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
-			ioutils.SendError(w, http.StatusInternalServerError, "internal")
-			return
+			log.Fatal(err)
 		}
-		defer file.Close()
 
-		writer := multipart.NewWriter(body)
-		part, _ := writer.CreateFormFile("file", filepath.Base(file.Name()))
-		io.Copy(part, file)
-		writer.Close()
+		// Determine the content type of the file
+		mimeType := http.DetectContentType(bytes)
 
-		file.Seek(0, 0)
-		fileHeader := make([]byte, 512)
-		_, err = file.Read(fileHeader)
-		if err != nil {
-			fm.logger.Errorf("%s failed to read user file %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
-			ioutils.SendError(w, http.StatusInternalServerError, "internal")
-			return
-		}
-		fileInfo, _ := file.Stat()
-		fileSize := fileInfo.Size()
-
-		// w.Header().Set("Expires", "0")
-		// w.Header().Set("Content-Transfer-Encoding", "binary")
-		// w.Header().Set("Content-Control", "private, no-transform, no-store, must-revalidate")
-		// // w.Header().Set("Content-Disposition", "attachment; filename="+filePath)
-		// // w.Header().Set("Content-Type", fileType)
-		contentLength += fileSize
-		contentType = writer.FormDataContentType()
-		// file.Seek(0, 0)
-		// fileByte, err := ioutil.ReadAll(file)
-		// if err != nil {
-		// 	fm.logger.Errorf("%s failed to cust file to byte %s with [status=%d] [error=%s]", handlerURL, filePath, http.StatusInternalServerError, err)
-		// 	ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		// 	return
-
-		// }
-		// resp = append(resp, fileByte...)
+		// Append the base64 encoded output
+		base64Encoding := base64.StdEncoding.EncodeToString(bytes)
+		resp.Files = append(resp.Files, models.FileStruct{
+			File: base64Encoding,
+			Type: mimeType,
+		})
 	}
-	w.Header().Set("Content-Length", strconv.FormatInt(int64(body.Len()), 10))
-	w.Header().Set("Content-Type", contentType)
-	// w.Header().Set("Content-Type", "multipart/form-data")
-	_, err := io.Copy(w, bytes.NewReader(body.Bytes()))
-	if err != nil {
-		fm.logger.Errorf("%s failed to write files to user %s with [status=%d] [error=%s]", handlerURL, http.StatusInternalServerError, err)
-		ioutils.SendError(w, http.StatusInternalServerError, "internal")
-		return
-	}
+	ioutils.Send(w, http.StatusOK, resp)
 }
 
 func (fm *FileManager) Download(w http.ResponseWriter, r *http.Request) {
