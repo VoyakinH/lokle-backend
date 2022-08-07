@@ -240,14 +240,6 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// find file
 	files := r.MultipartForm.File["file"]
-	// file, fileHeader, err := r.FormFile("file")
-	// if err != nil {
-	// 	fm.logger.Errorf("%s can't to find file in req [status=%d]", r.URL, http.StatusBadRequest)
-	// 	ioutils.SendError(w, http.StatusBadRequest, "bad request")
-	// 	return
-	// }
-	// defer file.Close()
-
 	for _, fileHeader := range files {
 		if fileHeader.Size > MaxUploadFileSize {
 			fm.logger.Errorf("%s file is too big [status=%d]", r.URL, http.StatusBadRequest)
@@ -272,7 +264,7 @@ func (fm *FileManager) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// determine filename
-		curFilename := fmt.Sprintf("%s_%d%s", commonFilename, sameFilesCount, filepath.Ext(fileHeader.Filename))
+		curFilename := fmt.Sprintf("%s_%d%s", commonFilename, sameFilesCount, strings.ToLower(filepath.Ext(fileHeader.Filename)))
 		// curFilename := commonFilename + "_" + strconv.Itoa(sameFilesCount) +
 
 		// create a new file in the uploads directory
