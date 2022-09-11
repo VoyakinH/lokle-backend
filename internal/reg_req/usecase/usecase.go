@@ -93,28 +93,39 @@ func (rru *regReqUsecase) CreateVerifyParentPassportReq(ctx context.Context, par
 }
 
 func (rru *regReqUsecase) FixVerifyParentPassportReq(ctx context.Context, parent models.Parent, reqFix models.FixParentPassportReq) (int, error) {
+	// if parent passport has already been verified
+	// we don't need to do something because parent can't to have some passport registration requests
 	if parent.PassportVerified {
 		return http.StatusOK, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: parent passport has been already verified")
 	}
 
-	_, err := rru.psql.GetRegRequestByID(ctx, reqFix.ReqID)
+	// finding passport registration request by ID
+	regReq, err := rru.psql.GetRegRequestByID(ctx, reqFix.ReqID)
 	if err == pgx.ErrNoRows {
 		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: request not found")
 	} else if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to get request with err: %s", err)
 	}
 
+	// checking that registration request ID belongs to the authenticated parent
+	if regReq.UserID != parent.UserID {
+		return http.StatusForbidden, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: try to fix another's passport reg req")
+	}
+
+	// encrypt new passport data for updating request
 	encryptedPassport, err := crypt.Encrypt(reqFix.Passport)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to encrypt parent passport with err: %s", err)
 	}
 	reqFix.Passport = encryptedPassport
 
+	// update parent passport in psql
 	_, err = rru.userPsql.UpdateParentPassport(ctx, parent.ID, reqFix.Passport)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to update parent passport with err: %s", err)
 	}
 
+	// update request (create_time, etc.)
 	err = rru.psql.FixRegReq(ctx, reqFix.ReqID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixVerifyParentPassportReq: failed to fix verification request with err: %s", err)

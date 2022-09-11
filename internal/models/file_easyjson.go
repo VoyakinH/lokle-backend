@@ -210,7 +210,30 @@ func easyjson8ceb9162DecodeGithubComVoyakinHLokleBackendInternalModels2(in *jlex
 		case "user_id":
 			out.UserID = uint64(in.Uint64())
 		case "file_name":
-			out.FileName = string(in.String())
+			if in.IsNull() {
+				in.Skip()
+				out.FileName = nil
+			} else {
+				in.Delim('[')
+				if out.FileName == nil {
+					if !in.IsDelim(']') {
+						out.FileName = make([]string, 0, 4)
+					} else {
+						out.FileName = []string{}
+					}
+				} else {
+					out.FileName = (out.FileName)[:0]
+				}
+				for !in.IsDelim(']') {
+					var v4 string
+					v4 = string(in.String())
+					out.FileName = append(out.FileName, v4)
+					in.WantComma()
+				}
+				in.Delim(']')
+			}
+		case "response_type":
+			out.ResponseType = string(in.String())
 		default:
 			in.SkipRecursive()
 		}
@@ -233,7 +256,23 @@ func easyjson8ceb9162EncodeGithubComVoyakinHLokleBackendInternalModels2(out *jwr
 	{
 		const prefix string = ",\"file_name\":"
 		out.RawString(prefix)
-		out.String(string(in.FileName))
+		if in.FileName == nil && (out.Flags&jwriter.NilSliceAsEmpty) == 0 {
+			out.RawString("null")
+		} else {
+			out.RawByte('[')
+			for v5, v6 := range in.FileName {
+				if v5 > 0 {
+					out.RawByte(',')
+				}
+				out.String(string(v6))
+			}
+			out.RawByte(']')
+		}
+	}
+	{
+		const prefix string = ",\"response_type\":"
+		out.RawString(prefix)
+		out.String(string(in.ResponseType))
 	}
 	out.RawByte('}')
 }
@@ -260,4 +299,77 @@ func (v *DonwloadReq) UnmarshalJSON(data []byte) error {
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *DonwloadReq) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson8ceb9162DecodeGithubComVoyakinHLokleBackendInternalModels2(l, v)
+}
+func easyjson8ceb9162DecodeGithubComVoyakinHLokleBackendInternalModels3(in *jlexer.Lexer, out *DeleteReq) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "user_id":
+			out.UserID = uint64(in.Uint64())
+		case "file_name":
+			out.FileName = string(in.String())
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson8ceb9162EncodeGithubComVoyakinHLokleBackendInternalModels3(out *jwriter.Writer, in DeleteReq) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"user_id\":"
+		out.RawString(prefix[1:])
+		out.Uint64(uint64(in.UserID))
+	}
+	{
+		const prefix string = ",\"file_name\":"
+		out.RawString(prefix)
+		out.String(string(in.FileName))
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v DeleteReq) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson8ceb9162EncodeGithubComVoyakinHLokleBackendInternalModels3(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v DeleteReq) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson8ceb9162EncodeGithubComVoyakinHLokleBackendInternalModels3(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *DeleteReq) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson8ceb9162DecodeGithubComVoyakinHLokleBackendInternalModels3(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *DeleteReq) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson8ceb9162DecodeGithubComVoyakinHLokleBackendInternalModels3(l, v)
 }
