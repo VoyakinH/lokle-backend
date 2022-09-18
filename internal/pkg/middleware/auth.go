@@ -29,14 +29,14 @@ func (am AuthMiddleware) WithAuth(h http.Handler) http.Handler {
 		cookieToken, err := r.Cookie("session-id")
 		if err != nil {
 			am.logger.Errorf("%s COOKIE AUTH failed with [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
-			ioutils.SendError(w, http.StatusUnauthorized, "no credentials")
+			ioutils.SendDefaultError(w, http.StatusUnauthorized)
 			return
 		}
 
 		user, status, err := am.UserUseCase.CheckSession(ctx, cookieToken.Value)
 		if err != nil || status != http.StatusOK {
 			am.logger.Errorf("%s COOKIE AUTH failed with [status=%d] [error=%s]", r.URL, status, err)
-			ioutils.SendError(w, status, "internal")
+			ioutils.SendDefaultError(w, status)
 			return
 		}
 

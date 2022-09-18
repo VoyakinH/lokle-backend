@@ -31,12 +31,12 @@ type IRegReqUsecase interface {
 	CreateChild(context.Context, models.ChildFirstRegReq, uint64) (models.Child, int, error)
 	CompleteRegReq(context.Context, uint64) (int, error)
 	SecondRegistrationChildStage(context.Context, models.ChildSecondRegReq, models.Parent) (models.RegReqFull, int, error)
-	ThirdRegistrationChildStage(context.Context, models.ChildThirdRegReq) (models.RegReqFull, int, error)
+	ThirdRegistrationChildStage(context.Context, models.ChildThirdRegReq, models.Parent) (models.RegReqFull, int, error)
 	FailedRegReq(context.Context, uint64, models.FailedReq) (int, error)
 	FixVerifyParentPassportReq(context.Context, models.Parent, models.FixParentPassportReq) (int, error)
 	FixChild(context.Context, models.FixChildFirstRegReq) (int, error)
 	FixSecondRegistrationChildStage(context.Context, models.FixChildSecondRegReq, models.Parent) (int, error)
-	FixThirdRegistrationChildStage(context.Context, models.FixChildThirdRegReq) (int, error)
+	FixThirdRegistrationChildStage(context.Context, models.FixChildThirdRegReq, models.Parent) (int, error)
 }
 
 type regReqUsecase struct {
@@ -203,12 +203,12 @@ func (rru *regReqUsecase) CreateChild(ctx context.Context, childReq models.Child
 func (rru *regReqUsecase) FixChild(ctx context.Context, childReq models.FixChildFirstRegReq) (int, error) {
 	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
 	if err == pgx.ErrNoRows {
-		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixChild: request not found")
 	} else if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixChild: failed to get request with err: %s", err)
 	}
 	if req.Status == PendingReqStatus {
-		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixChild: can't update request in pending status")
 	}
 
 	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
@@ -265,15 +265,24 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child data with err: %s", err)
 	}
 
+	// checking that current child is a child of current parent
+	isParent, err := rru.userPsql.CheckParentChildren(ctx, parent.ID, child.ID)
+	if err != nil && err != pgx.ErrNoRows {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to check parent-child pair with err: %s", err)
+	}
+	if !isParent {
+		return models.RegReqFull{}, http.StatusBadRequest, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: current child isn't child of current parent")
+	}
+
 	respList, err := rru.psql.GetRegRequestList(ctx, child.UserID)
 	if err != nil {
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: failed to get child's requests: %s", err)
 	}
 	for _, existsReq := range respList {
-		if (existsReq.Type == models.ChildFirstStage ||
+		if existsReq.Type == models.ChildFirstStage ||
 			existsReq.Type == models.ChildSecondStage ||
-			existsReq.Type == models.ChildThirdStage) &&
-			existsReq.Status == PendingReqStatus {
+			existsReq.Type == models.ChildThirdStage {
+			// && existsReq.Status == PendingReqStatus {
 			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.SecondRegistrationChildStage: child has already created this request")
 		}
 	}
@@ -302,38 +311,67 @@ func (rru *regReqUsecase) SecondRegistrationChildStage(ctx context.Context, chil
 	return req, http.StatusOK, nil
 }
 
-func (rru *regReqUsecase) FixSecondRegistrationChildStage(ctx context.Context, childReq models.FixChildSecondRegReq, parent models.Parent) (int, error) {
+func (rru *regReqUsecase) FixSecondRegistrationChildStage(
+	ctx context.Context,
+	childReq models.FixChildSecondRegReq,
+	parent models.Parent,
+) (int, error) {
+	// getting request by id
 	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
 	if err == pgx.ErrNoRows {
-		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
+		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: request not found")
 	} else if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
-	}
-	if req.Status == PendingReqStatus {
-		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to get request with err: %s", err)
 	}
 
+	// if request status is "pending" parent can't to fix this one
+	if req.Status == PendingReqStatus {
+		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: can't update request in pending status")
+	}
+
+	// checking that request is a second stage of child registration
+	if req.Type != models.ChildThirdStage {
+		return http.StatusBadRequest, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: request is not second stage of child registration")
+	}
+
+	// getting child by uid
 	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to get child data with err: %s", err)
 	}
+
+	// checking that current child is a child of current parent
+	isParent, err := rru.userPsql.CheckParentChildren(ctx, parent.ID, child.ID)
+	if err != nil && err != pgx.ErrNoRows {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to check parent-child pair with err: %s", err)
+	}
+	if !isParent {
+		return http.StatusBadRequest, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: current child isn't child of current parent")
+	}
+
+	// updating child birth date for next update in db
 	childReq.Child.BirthDate = child.BirthDate
+
+	// encryptnig passport data
 	encryptedPassport, err := crypt.Encrypt(childReq.Child.Passport)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to encrypt child passport with err: %s", err)
 	}
 	childReq.Child.Passport = encryptedPassport
 
+	// updating child in db
 	err = rru.userPsql.UpdateChild(ctx, childReq.Child)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to update child data with err: %s", err)
 	}
 
+	// updating parent-child relationship
 	err = rru.userPsql.UpdateParentChildRelationship(ctx, parent.ID, child.ID, childReq.Relationship)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to update parent and child relationship with err: %s", err)
 	}
 
+	// updating request in db
 	err = rru.psql.FixRegReq(ctx, childReq.ReqID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixSecondRegistrationChildStage: failed to fix request with err: %s", err)
@@ -342,10 +380,23 @@ func (rru *regReqUsecase) FixSecondRegistrationChildStage(ctx context.Context, c
 	return http.StatusOK, nil
 }
 
-func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, childReq models.ChildThirdRegReq) (models.RegReqFull, int, error) {
+func (rru *regReqUsecase) ThirdRegistrationChildStage(
+	ctx context.Context,
+	childReq models.ChildThirdRegReq,
+	parent models.Parent,
+) (models.RegReqFull, int, error) {
 	child, err := rru.userPsql.GetChildByUID(ctx, childReq.Child.UserID)
 	if err != nil {
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child data with err: %s", err)
+	}
+
+	// checking that current child is a child of current parent
+	isParent, err := rru.userPsql.CheckParentChildren(ctx, parent.ID, child.ID)
+	if err != nil && err != pgx.ErrNoRows {
+		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to check parent-child pair with err: %s", err)
+	}
+	if !isParent {
+		return models.RegReqFull{}, http.StatusBadRequest, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: current child isn't child of current parent")
 	}
 
 	respList, err := rru.psql.GetRegRequestList(ctx, child.UserID)
@@ -353,10 +404,10 @@ func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, child
 		return models.RegReqFull{}, http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: failed to get child's requests: %s", err)
 	}
 	for _, existsReq := range respList {
-		if (existsReq.Type == models.ChildFirstStage ||
+		if existsReq.Type == models.ChildFirstStage ||
 			existsReq.Type == models.ChildSecondStage ||
-			existsReq.Type == models.ChildThirdStage) &&
-			existsReq.Status == PendingReqStatus {
+			existsReq.Type == models.ChildThirdStage {
+			// && existsReq.Status == PendingReqStatus {
 			return models.RegReqFull{}, http.StatusConflict, fmt.Errorf("RegReqUsecase.ThirdRegistrationChildStage: child has already created this request")
 		}
 	}
@@ -369,17 +420,45 @@ func (rru *regReqUsecase) ThirdRegistrationChildStage(ctx context.Context, child
 	return req, http.StatusOK, nil
 }
 
-func (rru *regReqUsecase) FixThirdRegistrationChildStage(ctx context.Context, childReq models.FixChildThirdRegReq) (int, error) {
+func (rru *regReqUsecase) FixThirdRegistrationChildStage(
+	ctx context.Context,
+	childReq models.FixChildThirdRegReq,
+	parent models.Parent,
+) (int, error) {
+	// finding request by id
 	req, err := rru.psql.GetRegRequestByID(ctx, childReq.ReqID)
 	if err == pgx.ErrNoRows {
 		return http.StatusNotFound, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request not found")
 	} else if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get request with err: %s", err)
 	}
+
+	// if request status is "pending" parent can't to fix this one
 	if req.Status == PendingReqStatus {
 		return http.StatusConflict, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: can't update request in pending status")
 	}
 
+	// checking that request is a third stage of child registration
+	if req.Type != models.ChildThirdStage {
+		return http.StatusBadRequest, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: request is not third stage of child registration")
+	}
+
+	// getting child by user id from request
+	child, err := rru.userPsql.GetChildByUID(ctx, req.UserID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to get child data with err: %s", err)
+	}
+
+	// checking that current child is a child of current parent
+	isParent, err := rru.userPsql.CheckParentChildren(ctx, parent.ID, child.ID)
+	if err != nil && err != pgx.ErrNoRows {
+		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to check parent-child pair with err: %s", err)
+	}
+	if !isParent {
+		return http.StatusBadRequest, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: current child isn't child of current parent")
+	}
+
+	// update registration request
 	err = rru.psql.FixRegReq(ctx, childReq.ReqID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("RegReqUsecase.FixThirdRegistrationChildStage: failed to create verification request with err: %s", err)

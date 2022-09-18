@@ -29,19 +29,19 @@ func (rm RoleMiddleware) CheckParent(h http.Handler) http.Handler {
 		user := ctx_utils.GetUser(ctx)
 		if user == nil {
 			logrus.Errorf("%s failed get ctx user for check role with [status=%d]", r.URL, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		if user.Role != models.ParentRole {
 			logrus.Errorf("%s role %s haven't access to parent functions [status=%d]", r.URL, user.Role, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth role")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 
 		parent, status, err := rm.UserUseCase.GetParentByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
 			rm.logger.Errorf("%s get parent from db failed with [status=%d] [error=%s]", r.URL, status, err)
-			ioutils.SendError(w, status, "internal")
+			ioutils.SendDefaultError(w, status)
 			return
 		}
 
@@ -57,19 +57,19 @@ func (rm RoleMiddleware) CheckChild(h http.Handler) http.Handler {
 		user := ctx_utils.GetUser(ctx)
 		if user == nil {
 			logrus.Errorf("%s failed get ctx user for check role with [status=%d]", r.URL, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		if user.Role != models.ChildRole {
 			logrus.Errorf("%s role %s haven't access to child functions [status=%d]", r.URL, user.Role, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth role")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 
 		child, status, err := rm.UserUseCase.GetChildByUID(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
 			rm.logger.Errorf("%s get child from db failed with [status=%d] [error=%s]", r.URL, status, err)
-			ioutils.SendError(w, status, "internal")
+			ioutils.SendDefaultError(w, status)
 			return
 		}
 
@@ -85,12 +85,12 @@ func (rm RoleMiddleware) CheckManager(h http.Handler) http.Handler {
 		user := ctx_utils.GetUser(ctx)
 		if user == nil {
 			logrus.Errorf("%s failed get ctx user for check role with [status=%d]", r.URL, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		if user.Role != models.ManagerRole {
 			logrus.Errorf("%s role %s haven't access to manager functions [status=%d]", r.URL, user.Role, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth role")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		h.ServeHTTP(w, r)
@@ -103,12 +103,12 @@ func (rm RoleMiddleware) CheckAdmin(h http.Handler) http.Handler {
 		user := ctx_utils.GetUser(ctx)
 		if user == nil {
 			logrus.Errorf("%s failed get ctx user for check role with [status=%d]", r.URL, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		if user.Role != models.AdminRole {
 			logrus.Errorf("%s role %s haven't access to admin functions [status=%d]", r.URL, user.Role, http.StatusForbidden)
-			ioutils.SendError(w, http.StatusForbidden, "no auth role")
+			ioutils.SendDefaultError(w, http.StatusForbidden)
 			return
 		}
 		h.ServeHTTP(w, r)

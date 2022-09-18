@@ -59,27 +59,27 @@ func (ud *UserDelivery) CreateUserSession(w http.ResponseWriter, r *http.Request
 	err := ioutils.ReadJSON(r, &credentials)
 	if err != nil || credentials.Email == "" || credentials.Password == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	user, status, err := ud.userUseCase.CheckUser(ctx, credentials)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "failed login")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
 	if !user.EmailVerified && user.Role == models.ParentRole {
 		ud.logger.Errorf("%s user email not verified [status=%d]", r.URL, http.StatusUnauthorized)
-		ioutils.SendError(w, http.StatusUnauthorized, "not verified email")
+		ioutils.SendDefaultError(w, http.StatusUnauthorized)
 		return
 	}
 
 	sessionID, status, err := ud.userUseCase.CreateSession(ctx, credentials.Email, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -99,14 +99,14 @@ func (ud *UserDelivery) DeleteUserSession(w http.ResponseWriter, r *http.Request
 	cookieToken, err := r.Cookie("session-id")
 	if err != nil {
 		ud.logger.Warnf("%s cookie not found with [status=%d] [error=%s]", r.URL, http.StatusOK, err)
-		ioutils.SendError(w, http.StatusOK, "no credentials")
+		ioutils.SendDefaultError(w, http.StatusOK)
 		return
 	}
 
 	status, err := ud.userUseCase.DeleteSession(ctx, cookieToken.Value)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -125,21 +125,21 @@ func (ud *UserDelivery) CheckUserSession(w http.ResponseWriter, r *http.Request)
 	user := ctx_utils.GetUser(ctx)
 	if user == nil {
 		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
 	cookieToken, err := r.Cookie("session-id")
 	if err != nil {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusUnauthorized, err)
-		ioutils.SendError(w, http.StatusUnauthorized, "no credentials")
+		ioutils.SendDefaultError(w, http.StatusUnauthorized)
 		return
 	}
 
 	status, err := ud.userUseCase.ProlongSession(ctx, cookieToken.Value, expCookieTime)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -161,14 +161,14 @@ func (ud *UserDelivery) SignupParent(w http.ResponseWriter, r *http.Request) {
 	err := ioutils.ReadJSON(r, &parent)
 	if err != nil || parent.Email == "" || parent.Password == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	createdParent, status, err := ud.userUseCase.CreateParentUser(ctx, parent)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -181,14 +181,14 @@ func (ud *UserDelivery) EmailVerification(w http.ResponseWriter, r *http.Request
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, "empty token")
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	status, err := ud.userUseCase.VerifyEmail(ctx, token)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -202,14 +202,14 @@ func (ud *UserDelivery) RepeatEmailVerification(w http.ResponseWriter, r *http.R
 	err := ioutils.ReadJSON(r, &credentials)
 	if err != nil || credentials.Email == "" || credentials.Password == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	status, err := ud.userUseCase.RepeatEmailVerification(ctx, credentials)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "failed login")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -221,7 +221,7 @@ func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
 	user := ctx_utils.GetUser(ctx)
 	if user == nil {
 		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
@@ -233,13 +233,13 @@ func (ud *UserDelivery) GetParent(w http.ResponseWriter, r *http.Request) {
 		parent, status, err = ud.userUseCase.CreateParent(ctx, user.ID)
 		if err != nil || status != http.StatusOK {
 			ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-			ioutils.SendError(w, status, "internal")
+			ioutils.SendDefaultError(w, status)
 			return
 		}
 	}
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -251,7 +251,7 @@ func (ud *UserDelivery) SignupManager(w http.ResponseWriter, r *http.Request) {
 	user := ctx_utils.GetUser(ctx)
 	if user == nil {
 		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
@@ -259,14 +259,14 @@ func (ud *UserDelivery) SignupManager(w http.ResponseWriter, r *http.Request) {
 	err := ioutils.ReadJSON(r, &manager)
 	if err != nil || manager.Email == "" || manager.Password == "" {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, http.StatusBadRequest, err)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	createdManager, status, err := ud.userUseCase.CreateManager(ctx, manager)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -278,14 +278,14 @@ func (ud *UserDelivery) GetParentChildren(w http.ResponseWriter, r *http.Request
 	parent := ctx_utils.GetParent(ctx)
 	if parent == nil {
 		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
 	respList, status, err := ud.userUseCase.GetParentChildren(ctx, parent.ID)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -297,27 +297,27 @@ func (ud *UserDelivery) GetChildByUID(w http.ResponseWriter, r *http.Request) {
 	manager := ctx_utils.GetUser(ctx)
 	if manager == nil {
 		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
 	childIDString := r.URL.Query().Get("child")
 	if childIDString == "" {
 		ud.logger.Errorf("%s empty query [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 	childID, err := strconv.ParseUint(childIDString, 10, 64)
 	if err != nil {
 		ud.logger.Errorf("%s invalid child id parameter [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	child, status, err := ud.userUseCase.GetChildByUID(ctx, childID)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -329,27 +329,27 @@ func (ud *UserDelivery) GetParentByUID(w http.ResponseWriter, r *http.Request) {
 	manager := ctx_utils.GetUser(ctx)
 	if manager == nil {
 		ud.logger.Errorf("%s failed get ctx parent with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
 	parentIDString := r.URL.Query().Get("parent")
 	if parentIDString == "" {
 		ud.logger.Errorf("%s empty query [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 	parentID, err := strconv.ParseUint(parentIDString, 10, 64)
 	if err != nil {
 		ud.logger.Errorf("%s invalid child id parameter [status=%d]", r.URL, http.StatusBadRequest)
-		ioutils.SendError(w, http.StatusBadRequest, "bad request")
+		ioutils.SendDefaultError(w, http.StatusBadRequest)
 		return
 	}
 
 	parent, status, err := ud.userUseCase.GetParentByUID(ctx, parentID)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 
@@ -361,14 +361,14 @@ func (ud *UserDelivery) GetManagers(w http.ResponseWriter, r *http.Request) {
 	parent := ctx_utils.GetUser(ctx)
 	if parent == nil {
 		ud.logger.Errorf("%s failed get ctx user with [status=%d]", r.URL, http.StatusForbidden)
-		ioutils.SendError(w, http.StatusForbidden, "no auth")
+		ioutils.SendDefaultError(w, http.StatusForbidden)
 		return
 	}
 
 	respList, status, err := ud.userUseCase.GetManagers(ctx)
 	if err != nil || status != http.StatusOK {
 		ud.logger.Errorf("%s failed with [status=%d] [error=%s]", r.URL, status, err)
-		ioutils.SendError(w, status, "internal")
+		ioutils.SendDefaultError(w, status)
 		return
 	}
 

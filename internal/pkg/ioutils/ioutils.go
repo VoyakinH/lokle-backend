@@ -35,6 +35,31 @@ func SendError(w http.ResponseWriter, respCode int, errorMsg string) {
 	})
 }
 
+func SendDefaultError(w http.ResponseWriter, respCode int) {
+	Send(w, respCode, ModelError{
+		Message: resolveErrorToString(respCode),
+	})
+}
+
+func resolveErrorToString(respCode int) string {
+	switch respCode {
+	case http.StatusBadRequest:
+		return "bad request"
+	case http.StatusUnauthorized:
+		return "no auth"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusInternalServerError:
+		return "internal"
+	default:
+		return "unknown error"
+	}
+}
+
 func SendWithoutBody(w http.ResponseWriter, respCode int) {
 	w.WriteHeader(respCode)
 }
