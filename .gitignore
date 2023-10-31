@@ -1,6 +1,10 @@
 # Created by https://www.toptal.com/developers/gitignore/api/macos,go,goland
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,go,goland
 
+# Сertificates
+kit-lokle.key
+kit-lokle.crt
+
 ### Go ###
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
@@ -177,3 +181,8 @@ Temporary Items
 *.icloud
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,go,goland
+
+config.json
+dump.rdb
+.vscode
+media
